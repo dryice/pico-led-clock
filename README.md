@@ -34,6 +34,6 @@ https://youtu.be/hb2HtoIEXM8?si=B6loUfyd5mQOX45j and
 https://youtu.be/OV67IjXsQbA?si=ETBBG7LJgcw_CoTv
 
 Wiring &amp; code to run a "Happy Graduation" on a Raspberry Pi Pico with a 64 x 32 HUB75 LED Matrix Display
-![Pico HUB75 Wiring Diagram](https://github.com/user-attachments/assets/d00afd63-ca34-4f65-a2f5-37aca9885d04)
+<img width="1920" height="1080" alt="improved wiring diagram for hub75 and pico" src="https://github.com/user-attachments/assets/fb0f92bd-08fa-4b90-8e05-5ee9dd3cefb0" />
 ![pico and 64x32 LED HUB75 wiring photo](https://github.com/user-attachments/assets/ad1b957d-1072-4f63-9da2-bb0b31e8d256)
 
