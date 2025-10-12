@@ -33,10 +33,15 @@ The code for this is only slightly different (and easier). AI can write the diff
 https://youtu.be/hb2HtoIEXM8?si=B6loUfyd5mQOX45j and
 https://youtu.be/OV67IjXsQbA?si=ETBBG7LJgcw_CoTv
 
+IMPORTANT:
+The original video lesson did not mention the need for a common ground. Be sure to connect the shared – (minus) terminal of the barrel jack back to any GND pin on the Pico. This step is critical for stable operation.
+ALSO: I discovered that using short 3" pin-to-pin wires connected through the ribbon cable completely eliminated the interference I saw when I tried to skip the ribbon and use only long 8" pin-socket jumpers.
+The diagrams below show the correct orientation for the ribbon cable and how to use the shorter 3" pin-pin wires. This setup greatly reduced distortion and interference compared to using long 8" jumpers alone.
+
 Wiring &amp; code to run a "Happy Graduation" on a Raspberry Pi Pico with a 64 x 32 HUB75 LED Matrix Display
-<img width="800" height="450" alt="Showing How to Wire with Ribbon" src="https://github.com/user-attachments/assets/26c134b2-5aae-4334-ac2f-ea60aa28bfc9" />
-<img width="800" height="537" alt="photo of hub75 and pico" src="https://github.com/user-attachments/assets/73a2579b-e8d7-4235-91d1-9f0822a25d9a" />
 <img width="800" height="450" alt="improved wiring diagram for hub75 and pico" src="https://github.com/user-attachments/assets/0985a79c-e9b0-41b5-bbf1-3da0da7d6aa4" />
+<img width="800" height="537" alt="photo of hub75 and pico" src="https://github.com/user-attachments/assets/73a2579b-e8d7-4235-91d1-9f0822a25d9a" />
+<img width="800" height="450" alt="Showing How to Wire with Ribbon" src="https://github.com/user-attachments/assets/26c134b2-5aae-4334-ac2f-ea60aa28bfc9" />
 
 
 
