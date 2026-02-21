@@ -92,6 +92,47 @@ def display_status(message):
     gc.collect()
 
 
+def connect_wifi(ssid, password):
+    """Connect to WiFi and return IP address or None on failure."""
+    print(f"Setup: connecting to wifi {ssid}...")
+    display_status("Connecting...")
+
+    try:
+        # Enable WiFi radio
+        wifi_radio.enabled = True
+        wifi_radio.hostname = "pico-led-clock"
+
+        # Connect to network
+        wifi_pool.init()
+        wifi_radio.connect(ssid, password)
+
+        # Wait for connection (max 10 seconds)
+        timeout = time.monotonic() + 10
+        while not wifi_radio.connected and time.monotonic() < timeout:
+            time.sleep(0.1)
+
+        if not wifi_radio.connected:
+            print(f"✗ Connection failed: timeout after 10s")
+            display_status("WiFi failed")
+            return None
+
+        # Get IP address
+        ip_address = wifi_radio.ipv4_address
+        print(f"✓ Connected, my IP is {ip_address}")
+        display_status(f"Connected: {ip_address}")
+
+        # Create socket pool for requests
+        socket_pool = socketpool.SocketPool(wifi_radio)
+        requests = Session(socket_pool)
+
+        return ip_address, requests
+
+    except Exception as e:
+        print(f"✗ Connection failed: {e}")
+        display_status("WiFi failed")
+        return None
+
+
 displayio.release_displays()
 
 # === Setup for Pico ===
