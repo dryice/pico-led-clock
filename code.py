@@ -621,8 +621,6 @@ except Exception as e:
 
 # === Main Loop ===
 while True:
-    global ntp_retry_active, ntp_retry_time
-
     # Check NTP sync
     current_time = time.monotonic()
 
