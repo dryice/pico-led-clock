@@ -93,11 +93,17 @@ def display_status(message):
 
 
 def connect_wifi(ssid, password):
-    """Connect to WiFi and return IP address or None on failure."""
+    """Connect to WiFi and return (ip_address, requests) tuple or None on failure."""
     print(f"Setup: connecting to wifi {ssid}...")
     display_status("Connecting...")
 
     try:
+        # Validate inputs
+        if not ssid or not password:
+            print("✗ Connection failed: ssid and password required")
+            display_status("WiFi failed")
+            return None
+
         # Enable WiFi radio
         wifi_radio.enabled = True
         wifi_radio.hostname = "pico-led-clock"
@@ -122,8 +128,9 @@ def connect_wifi(ssid, password):
         display_status(f"Connected: {ip_address}")
 
         # Create socket pool for requests
-        socket_pool = socketpool.SocketPool(wifi_radio)
-        requests = Session(socket_pool)
+        pool = socketpool.SocketPool(wifi_radio)
+        requests = Session(pool)
+        gc.collect()
 
         return ip_address, requests
 
