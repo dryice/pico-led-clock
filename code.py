@@ -12,16 +12,10 @@
 import board, displayio, time, gc, random, math, rgbmatrix, framebufferio
 import rtc
 
-# If you use a Matrix Portal S3, you'll need to import the coe below,
-# from adafruit_matrixportal.matrixportal import MatrixPortal
 from adafruit_bitmap_font import bitmap_font
 from adafruit_display_text.label import Label
 
 displayio.release_displays()
-
-# === Setup for Matrix Portal S3 ===
-# matrixportal = MatrixPortal(status_neopixel=board.NEOPIXEL, bit_depth=6, debug=True)
-# display = matrixportal.graphics.display
 
 # === Setup for Pico ===
 # Setup rgbmatrix display (change pins to match your wiring)
