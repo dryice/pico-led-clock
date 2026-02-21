@@ -276,6 +276,11 @@ while True:
     for i, (msg1, msg2, logo_path, *optional_color) in enumerate(messages):
         try:
             gc.collect()
+
+            # Handle callable messages (time display)
+            if callable(msg1):
+                msg1 = msg1()
+
             color = optional_color[0] if optional_color else None
             scroll_group, content_width = create_scroll_group(
                 logo_path, msg1, msg2, color
