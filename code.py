@@ -108,10 +108,6 @@ def connect_wifi(ssid, password):
     display_status("Connecting...")
 
     try:
-        # Enable WiFi radio
-        wifi.radio.enabled = True
-        wifi.radio.hostname = "pico-led-clock"
-
         # Validate inputs
         if not ssid or not password:
             print("✗ Connection failed: ssid and password required")
@@ -119,6 +115,7 @@ def connect_wifi(ssid, password):
             return None
 
         # Connect to network
+        print(f"Connecting to {ssid}...")
         wifi.radio.connect(ssid, password)
 
         # Wait for connection (max 10 seconds)
