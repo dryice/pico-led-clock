@@ -26,6 +26,45 @@ A microUSB cable & a power supply for the pico if you plan to run it when not co
 
 And if you prefer to diffuse the LEDs for a more "square" look to the pixels that also aren't as garishly bright, you can cover the display with diffusion acrylic like this: https://www.adafruit.com/product/4594
 
+**Pico 2W** (with WiFi) - Required for NTP time sync
+https://www.raspberrypi.com/products/raspberry-pi-pico-2-w/
+
+## WiFi and NTP Setup
+
+To enable automatic time synchronization, you'll need a **Pico 2W** (with built-in WiFi).
+
+1. Copy `config.ini.example` to `config.ini`
+2. Edit `config.ini` with your WiFi credentials:
+   ```ini
+   [wifi]
+   ssid = YourNetworkName
+   password = YourWiFiPassword
+
+   [ntp]
+   server = pool.ntp.org
+   timezone_offset = +8  # Your timezone offset from UTC
+   ```
+
+3. Copy `config.ini` to your CIRCUITPY drive
+4. The clock will:
+   - Connect to WiFi on startup
+   - Sync time via NTP
+   - Resync every 10 minutes
+   - Display connection status on LED matrix
+
+**Timezone offsets:**
+- UTC-8 (Pacific Time): `-8`
+- UTC+0 (GMT): `0`
+- UTC+8 (Singapore/China): `+8`
+- UTC+9 (Japan): `+9`
+
+**Status messages:**
+- "Setup..." - Initializing
+- "Connecting..." - Connecting to WiFi
+- "Connected: IP" - WiFi connected
+- "Syncing..." - Syncing NTP
+- "Ready!" - Setup complete, starting animations
+
 Drag files & folders onto a Pico configured with the latest CircuitPython from CircuitPython.org (if you donn't know how to set up a pico with CircuitPython see the lesson at https://bit.ly/pico-school). The "lib" folder above shows you which libraries are used, but I'd STRONGLY advise downloading the newest version from CircuitPython.org. If you're new to CircuitPython and will do more projects, use CIRCUP. There is a lesson in pico-school on circup, as well. All tutorials for the University Course I teach to new-to-coding/new-to-electronics students is at: https://bit.ly/circuitpython-school. Pico only at https://bit.ly/pico-school
 
 CONSIDERATION: As mentioned, you might consider the super-easy setup of buying an Adafruit MatrixPortal S3 (go for the S3 and not the M4, the S3 is newer, more capable with more storage, and cheaper). Using a Matrix Portal S3 allows you to use just one USB-style power supply (which you probably have laying around the house, for mobile phones, etc) and one USB-C cable to power both the board & the display. At the time I created this, that board was only $19.95 US at Adafruit: https://www.adafruit.com/product/5778
