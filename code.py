@@ -47,13 +47,24 @@ def load_config():
                 # Key-value pairs
                 if "=" in line and current_section:
                     key, value = line.split("=", 1)
+                    # Remove inline comments
+                    if "#" in value:
+                        value = value.split("#")[0]
                     config[current_section][key.strip().lower()] = value.strip()
 
         # Validate required fields
-        if "wifi" not in config or "ssid" not in config["wifi"]:
+        if "wifi" not in config:
+            raise ValueError("Missing [wifi] section in config.ini")
+        if "ssid" not in config["wifi"]:
             raise ValueError("Missing wifi.ssid in config.ini")
-        if "wifi" not in config or "password" not in config["wifi"]:
+        if "password" not in config["wifi"]:
             raise ValueError("Missing wifi.password in config.ini")
+
+        # Set defaults for optional fields
+        if "ntp" not in config:
+            config["ntp"] = {}
+        config["ntp"].setdefault("server", "pool.ntp.org")
+        config["ntp"].setdefault("timezone_offset", "0")
 
         print("✓ Config loaded successfully")
         return config
