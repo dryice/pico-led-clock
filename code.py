@@ -39,7 +39,7 @@ matrix = rgbmatrix.RGBMatrix(
         board.GP10,  # A
         board.GP16,  # B
         board.GP18,  # C
-        board.GP20   # D
+        board.GP20,  # D
         board.GP21   # E
     ],
     clock_pin=board.GP11,
@@ -88,8 +88,10 @@ SCROLL_STEP = 1
 # You can add or remove elements from the messages lists, as you like.
 # Add a second line of text in the empty strings for a two-line message in smaller font
 messages = [
-    ("Congratulations Maker!", "", "/graphics/tools.bmp", GOLDENROD),
-    ("You Built It!", "", "/graphics/raspberry-pi-logo.bmp", SOFT_RED),
+    (" Hello Theodore! ",  " How are you? ", "/graphics/robot.bmp", GOLDENROD),
+    (" I changed it! ", "", "/graphics/cool-emoji.bmp", SOFT_RED),
+    (" It's pretty fun! ", "", "/graphics/swift-logo.bmp", WARM_GOLD),
+    (" Come and join me! ",  "", "/graphics/globe.bmp", DEEP_CORAL)
 ]
 
 def create_scroll_group(logo_path, text1, text2, color=None):
@@ -112,7 +114,7 @@ def create_scroll_group(logo_path, text1, text2, color=None):
                 logo_bitmap,
                 pixel_shader=logo_bitmap.pixel_shader,
                 x=2,
-                y=0
+                y=33
             )
             group.append(logo_tilegrid)
             logo_width = logo_tilegrid.width
@@ -125,6 +127,7 @@ def create_scroll_group(logo_path, text1, text2, color=None):
         label1 = Label(font_large, text=text1, color=color1)
         label1.x = text_start
         label1.y = 16
+        # label1.y = 48
         group.append(label1)
         text_width = label1.bounding_box[2]
     else:
@@ -136,6 +139,7 @@ def create_scroll_group(logo_path, text1, text2, color=None):
         label2 = Label(font_small, text=text2, color=color2)
         label2.x = text_start
         label2.y = 22
+        # label2.y = 54
         group.append(label2)
 
         text_width = max(
