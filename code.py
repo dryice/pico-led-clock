@@ -58,6 +58,11 @@ display = framebufferio.FramebufferDisplay(matrix)
 WIDTH = display.width
 HEIGHT = display.height
 
+# === Set Initial Time ===
+# Update year, month, day, hour, minute as needed
+current_time = time.struct_time((2025, 2, 21, 10, 30, 0, 0, -1, -1))
+rtc.RTC().datetime = current_time
+
 main_group = displayio.Group()
 display.root_group = main_group
 
