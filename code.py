@@ -59,7 +59,8 @@ WIDTH = display.width
 HEIGHT = display.height
 
 # === Set Initial Time ===
-# Update year, month, day, hour, minute as needed
+# Update year, month, day, hour, minute below as needed
+# CircuitPython will keep time running from this point
 current_time = time.struct_time((2025, 2, 21, 10, 30, 0, 0, -1, -1))
 rtc.RTC().datetime = current_time
 
