@@ -86,8 +86,10 @@ def display_status(message):
     """Display status message on LED matrix."""
     print(message)
 
-    # Clear main group
-    main_group.clear()
+    # Clear main group by creating a new one
+    global main_group
+    main_group = displayio.Group()
+    display.root_group = main_group
 
     # Create status label
     try:
@@ -96,6 +98,7 @@ def display_status(message):
         display.refresh()
     except Exception as e:
         print(f"✗ Display error: {e}")
+        # Still try to continue
 
     gc.collect()
 
