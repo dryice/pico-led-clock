@@ -15,6 +15,7 @@ import rtc
 from adafruit_bitmap_font import bitmap_font
 from adafruit_display_text.label import Label
 
+import wifi
 import wifi_pool
 import wifi_radio
 from adafruit_requests import Session
