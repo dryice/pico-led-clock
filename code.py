@@ -25,7 +25,7 @@ displayio.release_displays()
 # Setup rgbmatrix display (change pins to match your wiring)
 matrix = rgbmatrix.RGBMatrix(
     width=64, # Change width & height if you have an LED matrix with different dimensions
-    height=32,
+    height=64,
     bit_depth=6,
     rgb_pins=[ # Preserve GP4 & GP5 for standard STEMMA-QT
         board.GP2,   # R1
@@ -40,6 +40,7 @@ matrix = rgbmatrix.RGBMatrix(
         board.GP16,  # B
         board.GP18,  # C
         board.GP20   # D
+        board.GP21   # E
     ],
     clock_pin=board.GP11,
     latch_pin=board.GP12,
