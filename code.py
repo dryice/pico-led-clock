@@ -16,8 +16,6 @@ from adafruit_bitmap_font import bitmap_font
 from adafruit_display_text.label import Label
 
 import wifi
-import wifi_pool
-import wifi_radio
 import socket
 from adafruit_requests import Session
 import socketpool
@@ -106,37 +104,36 @@ def connect_wifi(ssid, password):
     display_status("Connecting...")
 
     try:
+        # Enable WiFi radio
+        wifi.radio.enabled = True
+        wifi.radio.hostname = "pico-led-clock"
+
         # Validate inputs
         if not ssid or not password:
             print("✗ Connection failed: ssid and password required")
             display_status("WiFi failed")
             return None
 
-        # Enable WiFi radio
-        wifi_radio.enabled = True
-        wifi_radio.hostname = "pico-led-clock"
-
         # Connect to network
-        wifi_pool.init()
-        wifi_radio.connect(ssid, password)
+        wifi.radio.connect(ssid, password)
 
         # Wait for connection (max 10 seconds)
         timeout = time.monotonic() + 10
-        while not wifi_radio.connected and time.monotonic() < timeout:
+        while not wifi.radio.connected and time.monotonic() < timeout:
             time.sleep(0.1)
 
-        if not wifi_radio.connected:
+        if not wifi.radio.connected:
             print(f"✗ Connection failed: timeout after 10s")
             display_status("WiFi failed")
             return None
 
         # Get IP address
-        ip_address = wifi_radio.ipv4_address
+        ip_address = wifi.radio.ipv4_address
         print(f"✓ Connected, my IP is {ip_address}")
         display_status(f"Connected: {ip_address}")
 
         # Create socket pool for requests
-        pool = socketpool.SocketPool(wifi_radio)
+        pool = socketpool.SocketPool(wifi.radio)
         requests = Session(pool)
         gc.collect()
 
