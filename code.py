@@ -18,6 +18,7 @@ from adafruit_display_text.label import Label
 import wifi
 import wifi_pool
 import wifi_radio
+import socket
 from adafruit_requests import Session
 import socketpool
 
@@ -138,6 +139,51 @@ def connect_wifi(ssid, password):
         print(f"✗ Connection failed: {e}")
         display_status("WiFi failed")
         return None
+
+
+def sync_ntp(requests, server):
+    """Sync time from NTP server and return struct_time or None on failure."""
+    print(f"Setup: syncing NTP from {server}...")
+    display_status("Syncing...")
+
+    try:
+        # NTP request packet (48 bytes)
+        NTP_PACKET = bytearray(48)
+        NTP_PACKET[0] = 0x1B  # LI=0, VN=3, Mode=3 (client)
+
+        # Get server IP
+        server_ip = socket.getaddrinfo(server, 123)[0][4][0]
+
+        # Create UDP socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(5.0)
+
+        # Send request
+        sock.sendto(NTP_PACKET, (server_ip, 123))
+
+        # Receive response
+        response, _ = sock.recvfrom(48)
+        sock.close()
+
+        # Extract transmit timestamp (bytes 40-47)
+        ntp_timestamp = int.from_bytes(response[40:48], byteorder="big")
+
+        # Convert NTP timestamp (1900 epoch) to Unix timestamp (1970 epoch)
+        # NTP epoch = Jan 1, 1900
+        # Unix epoch = Jan 1, 1970
+        # Difference = 70 years = 2208988800 seconds
+        unix_timestamp = ntp_timestamp - 2208988800
+
+        # Convert to struct_time
+        ntp_time = time.gmtime(unix_timestamp)
+
+        print(f"✓ NTP sync successful")
+        return ntp_time, unix_timestamp
+
+    except Exception as e:
+        print(f"✗ NTP sync failed: {e}")
+        display_status("NTP failed")
+        return None, None
 
 
 displayio.release_displays()
