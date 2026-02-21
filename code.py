@@ -141,11 +141,12 @@ def connect_wifi(ssid, password):
         return None
 
 
-def sync_ntp(requests, server):
+def sync_ntp(server):
     """Sync time from NTP server and return struct_time or None on failure."""
     print(f"Setup: syncing NTP from {server}...")
     display_status("Syncing...")
 
+    sock = None
     try:
         # NTP request packet (48 bytes)
         NTP_PACKET = bytearray(48)
@@ -163,10 +164,17 @@ def sync_ntp(requests, server):
 
         # Receive response
         response, _ = sock.recvfrom(48)
-        sock.close()
+
+        # Validate response length
+        if len(response) < 48:
+            raise ValueError(f"Invalid NTP response: {len(response)} bytes")
 
         # Extract transmit timestamp (bytes 40-47)
         ntp_timestamp = int.from_bytes(response[40:48], byteorder="big")
+
+        # Validate timestamp range (must be >= 1900 epoch)
+        if ntp_timestamp < 2208988800:
+            raise ValueError(f"Invalid NTP timestamp: {ntp_timestamp}")
 
         # Convert NTP timestamp (1900 epoch) to Unix timestamp (1970 epoch)
         # NTP epoch = Jan 1, 1900
@@ -184,6 +192,10 @@ def sync_ntp(requests, server):
         print(f"✗ NTP sync failed: {e}")
         display_status("NTP failed")
         return None, None
+    finally:
+        if sock:
+            sock.close()
+            gc.collect()
 
 
 displayio.release_displays()
