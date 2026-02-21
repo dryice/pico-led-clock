@@ -107,6 +107,31 @@ messages = [
 ]
 
 
+def get_time_string():
+    """Generate formatted time string: 'Mon Feb 21 10:30'"""
+    t = time.localtime()
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ]
+
+    day_name = days[t.tm_wday]
+    month_name = months[t.tm_mon - 1]
+
+    return f"{day_name} {month_name} {t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}"
+
+
 def create_scroll_group(logo_path, text1, text2, color=None):
     group = displayio.Group()
     logo_width = 0
