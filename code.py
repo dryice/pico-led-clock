@@ -91,16 +91,18 @@ def display_status(message):
     main_group.clear()
 
     # Create status label
-    status_label = Label(font_small, text=message, color=WHITE, x=2, y=32)
+    try:
+        status_label = Label(font_small, text=message, color=WHITE, x=2, y=32)
+        main_group.append(status_label)
+        display.refresh()
+    except Exception as e:
+        print(f"✗ Display error: {e}")
 
-    main_group.append(status_label)
-    display.refresh()
     gc.collect()
 
 
 def connect_wifi(ssid, password):
     """Connect to WiFi and return (ip_address, requests) tuple or None on failure."""
-    print(f"Setup: connecting to wifi {ssid}...")
     display_status("Connecting...")
 
     try:
@@ -148,7 +150,6 @@ def connect_wifi(ssid, password):
 
 def sync_ntp(server):
     """Sync time from NTP server and return struct_time or None on failure."""
-    print(f"Setup: syncing NTP from {server}...")
     display_status("Syncing...")
 
     sock = None
@@ -190,7 +191,6 @@ def sync_ntp(server):
         # Convert to struct_time
         ntp_time = time.gmtime(unix_timestamp)
 
-        print(f"✓ NTP sync successful")
         return ntp_time, unix_timestamp
 
     except Exception as e:
@@ -298,7 +298,7 @@ def setup():
     current_rtc_time = time.localtime()
     rtc_unix = int(time.mktime(current_rtc_time))
     drift = calculate_drift(rtc_unix, ntp_unix)
-    print(f"Sync time via NTP, {drift:.2f}s drifted")
+    print(f"Sync time via NTP, {drift:.3f}s drifted")
 
     # Apply timezone
     local_time = apply_timezone(ntp_unix, offset_hours)
@@ -333,7 +333,7 @@ def attempt_ntp_sync(ntp_server, timezone_offset):
 
         # Calculate drift
         drift = calculate_drift(rtc_unix, ntp_unix)
-        print(f"NTP sync: Sync time via NTP, {drift:.2f}s drifted")
+        print(f"Sync time via NTP, {drift:.3f}s drifted")
 
         # Apply timezone and update RTC
         local_time = apply_timezone(ntp_unix, timezone_offset)
