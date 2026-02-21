@@ -1,2 +1,7 @@
 # WiFi and NTP config
 config.ini
+
+# supporting files
+docs/
+AGENTS.md
+*.mpy
