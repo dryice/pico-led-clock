@@ -22,6 +22,11 @@ import socket
 from adafruit_requests import Session
 import socketpool
 
+# NTP sync tracking
+last_ntp_sync = 0
+ntp_retry_active = False
+ntp_retry_time = 0
+
 
 def load_config():
     """Load config.ini and return dictionary of settings."""
@@ -238,6 +243,74 @@ def calculate_drift(rtc_unix_timestamp, ntp_unix_timestamp):
         int: Drift in seconds (positive = NTP ahead of RTC)
     """
     return ntp_unix_timestamp - rtc_unix_timestamp
+
+
+def setup():
+    """Setup WiFi and NTP, return config and requests session."""
+    global last_ntp_sync
+
+    # Display setup message
+    display_status("Setup...")
+
+    # Load config
+    try:
+        config = load_config()
+    except Exception as e:
+        display_status("No config.ini")
+        while True:
+            time.sleep(1)  # Stop and wait
+
+    # Get config values
+    wifi_ssid = config["wifi"]["ssid"]
+    wifi_password = config["wifi"]["password"]
+    ntp_server = config.get("ntp", {}).get("server", "pool.ntp.org")
+    timezone_offset = config.get("ntp", {}).get("timezone_offset", "0")
+
+    # Validate timezone offset
+    try:
+        offset_hours = float(timezone_offset)
+        if offset_hours < -12 or offset_hours > 14:
+            raise ValueError(f"Invalid timezone offset: {offset_hours}")
+    except ValueError as e:
+        print(f"✗ Invalid timezone offset: {e}")
+        display_status("Invalid config")
+        while True:
+            time.sleep(1)  # Stop and wait
+
+    # Connect to WiFi
+    result = connect_wifi(wifi_ssid, wifi_password)
+    if result is None:
+        while True:
+            time.sleep(1)  # Stop and wait
+
+    ip_address, requests = result
+
+    # Sync NTP
+    ntp_time, ntp_unix = sync_ntp(ntp_server)
+    if ntp_time is None:
+        while True:
+            time.sleep(1)  # Stop and wait
+
+    # Calculate drift
+    current_rtc_time = time.localtime()
+    rtc_unix = int(time.mktime(current_rtc_time))
+    drift = calculate_drift(rtc_unix, ntp_unix)
+    print(f"Sync time via NTP, {drift:.2f}s drifted")
+
+    # Apply timezone
+    local_time = apply_timezone(ntp_unix, offset_hours)
+
+    # Update RTC
+    rtc.RTC().datetime = local_time
+
+    # Set last NTP sync time
+    last_ntp_sync = time.monotonic()
+
+    # Ready to start
+    display_status("Ready!")
+    time.sleep(2)
+
+    return config, requests, offset_hours, ntp_server
 
 
 displayio.release_displays()
@@ -498,6 +571,15 @@ def fireworks_animation(duration=2.5, burst_count=5, sparks_per_burst=40):
 
 
 print("*** Running Pico HUB75 Code! ***")
+
+# Setup WiFi and NTP
+try:
+    config, requests, timezone_offset, ntp_server = setup()
+except Exception as e:
+    print(f"✗ Setup failed: {e}")
+    display_status("Setup failed")
+    while True:
+        time.sleep(1)  # Stop and wait
 
 # === Main Loop ===
 while True:
