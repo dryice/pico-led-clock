@@ -100,10 +100,7 @@ SCROLL_STEP = 1
 # You can add or remove elements from the messages lists, as you like.
 # Add a second line of text in the empty strings for a two-line message in smaller font
 messages = [
-    (" Hello Theodore! ", " How are you? ", "/graphics/robot.bmp", GOLDENROD),
-    (" I changed it! ", "", "/graphics/cool-emoji.bmp", SOFT_RED),
-    (" It's pretty fun! ", "", "/graphics/swift-logo.bmp", WARM_GOLD),
-    (" Come and join me! ", "", "/graphics/globe.bmp", DEEP_CORAL),
+    (get_time_string, "", None, None),  # Time display, no logo
 ]
 
 
