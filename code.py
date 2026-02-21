@@ -16,9 +16,10 @@ from adafruit_bitmap_font import bitmap_font
 from adafruit_display_text.label import Label
 
 import wifi
-import socket
+import rtc
 from adafruit_requests import Session
 import socketpool
+import adafruit_ntp
 
 # NTP sync tracking
 last_ntp_sync = 0
@@ -147,57 +148,31 @@ def connect_wifi(ssid, password):
 
 def sync_ntp(server):
     """Sync time from NTP server and return struct_time or None on failure."""
+    print(f"Setup: syncing NTP from {server}...")
     display_status("Syncing...")
 
-    sock = None
     try:
-        # NTP request packet (48 bytes)
-        NTP_PACKET = bytearray(48)
-        NTP_PACKET[0] = 0x1B  # LI=0, VN=3, Mode=3 (client)
+        # Create socket pool for NTP
+        pool = socketpool.SocketPool(wifi.radio)
 
-        # Get server IP
-        server_ip = socket.getaddrinfo(server, 123)[0][4][0]
+        # Create NTP client
+        ntp = adafruit_ntp.NTP(pool, server=server, tz_offset=0)
 
-        # Create UDP socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(5.0)
+        # Get NTP time
+        ntp_datetime = ntp.datetime
 
-        # Send request
-        sock.sendto(NTP_PACKET, (server_ip, 123))
+        # Convert to Unix timestamp for drift calculation
+        # CircuitPython's time.mktime() expects a struct_time
+        ntp_time = time.struct_time(ntp_datetime[:8] + (0,))
+        unix_timestamp = time.mktime(ntp_time)
 
-        # Receive response
-        response, _ = sock.recvfrom(48)
-
-        # Validate response length
-        if len(response) < 48:
-            raise ValueError(f"Invalid NTP response: {len(response)} bytes")
-
-        # Extract transmit timestamp (bytes 40-47)
-        ntp_timestamp = int.from_bytes(response[40:48], byteorder="big")
-
-        # Validate timestamp range (must be >= 1900 epoch)
-        if ntp_timestamp < 2208988800:
-            raise ValueError(f"Invalid NTP timestamp: {ntp_timestamp}")
-
-        # Convert NTP timestamp (1900 epoch) to Unix timestamp (1970 epoch)
-        # NTP epoch = Jan 1, 1900
-        # Unix epoch = Jan 1, 1970
-        # Difference = 70 years = 2208988800 seconds
-        unix_timestamp = ntp_timestamp - 2208988800
-
-        # Convert to struct_time
-        ntp_time = time.gmtime(unix_timestamp)
-
+        print(f"✓ NTP sync successful")
         return ntp_time, unix_timestamp
 
     except Exception as e:
         print(f"✗ NTP sync failed: {e}")
         display_status("NTP failed")
         return None, None
-    finally:
-        if sock:
-            sock.close()
-            gc.collect()
 
 
 def apply_timezone(unix_timestamp, offset_hours):
