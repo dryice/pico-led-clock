@@ -198,6 +198,30 @@ def sync_ntp(server):
             gc.collect()
 
 
+def apply_timezone(time_struct, offset_hours):
+    """Apply timezone offset to UTC time."""
+    # Convert to Unix timestamp
+    unix_ts = time.mktime(time_struct)
+
+    # Apply offset (convert hours to seconds)
+    offset_seconds = int(offset_hours * 3600)
+    local_ts = unix_ts + offset_seconds
+
+    # Convert back to struct_time
+    return time.gmtime(local_ts)
+
+
+def calculate_drift(rtc_time, ntp_unix_time):
+    """Calculate time drift in seconds between RTC and NTP time."""
+    # Convert RTC to Unix timestamp
+    rtc_unix = time.mktime(rtc_time)
+
+    # Calculate drift
+    drift = ntp_unix_time - rtc_unix
+
+    return drift
+
+
 displayio.release_displays()
 
 # === Setup for Pico ===
