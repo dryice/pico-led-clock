@@ -284,6 +284,7 @@ def setup():
     # Ready to start
     display_status("Ready!")
     time.sleep(2)
+    display_status("")
 
     return config, requests, offset_hours, ntp_server
 
