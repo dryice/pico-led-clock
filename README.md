@@ -33,7 +33,7 @@ https://www.raspberrypi.com/products/raspberry-pi-pico-2-w/
 
 To enable automatic time synchronization, you'll need a **Pico 2W** (with built-in WiFi).
 
-1. Copy `config.ini.example` to `config.ini`
+1. Copy `config.ini.example` to the root of your CIRCUITPY drive as `config.ini`
 2. Edit `config.ini` with your WiFi credentials:
    ```ini
    [wifi]
@@ -54,9 +54,14 @@ To enable automatic time synchronization, you'll need a **Pico 2W** (with built-
 
 **Timezone offsets:**
 - UTC-8 (Pacific Time): `-8`
+- UTC-5 (US Eastern, Peru): `-5`
 - UTC+0 (GMT): `0`
+- UTC+5:30 (India): `+5.5`
 - UTC+8 (Singapore/China): `+8`
 - UTC+9 (Japan): `+9`
+- UTC+10 (Australia Eastern): `+10`
+
+For regions with Daylight Saving Time, update `timezone_offset` twice yearly.
 
 **Status messages:**
 - "Setup..." - Initializing
@@ -65,7 +70,29 @@ To enable automatic time synchronization, you'll need a **Pico 2W** (with built-
 - "Syncing..." - Syncing NTP
 - "Ready!" - Setup complete, starting animations
 
-Drag files & folders onto a Pico configured with the latest CircuitPython from CircuitPython.org (if you donn't know how to set up a pico with CircuitPython see the lesson at https://bit.ly/pico-school). The "lib" folder above shows you which libraries are used, but I'd STRONGLY advise downloading the newest version from CircuitPython.org. If you're new to CircuitPython and will do more projects, use CIRCUP. There is a lesson in pico-school on circup, as well. All tutorials for the University Course I teach to new-to-coding/new-to-electronics students is at: https://bit.ly/circuitpython-school. Pico only at https://bit.ly/pico-school
+⚠️ **Security**: `config.ini` contains your WiFi password in plain text. Never commit this file to version control. It's already in `.gitignore` - keep it that way.
+
+**Troubleshooting:**
+
+If the clock displays "No config.ini":
+- Check that `config.ini` exists in the root of your CIRCUITPY drive
+- Verify file format is correct (INI format with [wifi] and [ntp] sections)
+- Ensure SSID and password are correct
+
+If the clock displays "WiFi failed":
+- Check that your WiFi SSID and password are correct
+- Check that your router is powered on
+- Check that the Pico 2W has a clear line of sight to your WiFi router
+- Verify the Pico 2W has power (LED on the board)
+- Try disconnecting from your router and reconfiguring WiFi
+
+If the clock displays "NTP failed":
+- Check your internet connection is working
+- Verify NTP server name is correct (pool.ntp.org is reliable)
+- Check that port 123 (NTP) is not blocked by your firewall
+- Try using a different NTP server temporarily
+
+Drag files & folders onto a Pico configured with the latest CircuitPython from CircuitPython.org (if you don't know how to set up a pico with CircuitPython see the lesson at https://bit.ly/pico-school). The "lib" folder above shows you which libraries are used, but I'd STRONGLY advise downloading the newest version from CircuitPython.org. If you're new to CircuitPython and will do more projects, use CIRCUP. There is a lesson in pico-school on circup, as well. All tutorials for the University Course I teach to new-to-coding/new-to-electronics students is at: https://bit.ly/circuitpython-school. Pico only at https://bit.ly/pico-school
 
 CONSIDERATION: As mentioned, you might consider the super-easy setup of buying an Adafruit MatrixPortal S3 (go for the S3 and not the M4, the S3 is newer, more capable with more storage, and cheaper). Using a Matrix Portal S3 allows you to use just one USB-style power supply (which you probably have laying around the house, for mobile phones, etc) and one USB-C cable to power both the board & the display. At the time I created this, that board was only $19.95 US at Adafruit: https://www.adafruit.com/product/5778
 The code for this is only slightly different (and easier). AI can write the difference for you & if you want a vidoe tutorial, see: 
