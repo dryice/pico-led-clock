@@ -12,16 +12,335 @@
 import board, displayio, time, gc, random, math, rgbmatrix, framebufferio
 import rtc
 
-# If you use a Matrix Portal S3, you'll need to import the coe below,
-# from adafruit_matrixportal.matrixportal import MatrixPortal
 from adafruit_bitmap_font import bitmap_font
 from adafruit_display_text.label import Label
 
-displayio.release_displays()
+import wifi
+import rtc
+from adafruit_requests import Session
+import socketpool
+import adafruit_ntp
 
-# === Setup for Matrix Portal S3 ===
-# matrixportal = MatrixPortal(status_neopixel=board.NEOPIXEL, bit_depth=6, debug=True)
-# display = matrixportal.graphics.display
+# NTP sync tracking
+last_ntp_sync = 0
+ntp_retry_active = False
+ntp_retry_time = 0
+
+
+def load_config():
+    """Load config.ini and return dictionary of settings."""
+    print("Setup: reading config.ini...")
+
+    try:
+        config = {}
+        current_section = None
+
+        with open("/config.ini", "r") as f:
+            for line in f:
+                line = line.strip()
+
+                # Skip comments and empty lines
+                if not line or line.startswith("#"):
+                    continue
+
+                # Section headers
+                if line.startswith("[") and line.endswith("]"):
+                    current_section = line[1:-1].lower()
+                    config[current_section] = {}
+                    continue
+
+                # Key-value pairs
+                if "=" in line and current_section:
+                    key, value = line.split("=", 1)
+                    # Remove inline comments
+                    if "#" in value:
+                        value = value.split("#")[0]
+                    config[current_section][key.strip().lower()] = value.strip()
+
+        # Validate required fields
+        if "wifi" not in config:
+            raise ValueError("Missing [wifi] section in config.ini")
+        if "ssid" not in config["wifi"]:
+            raise ValueError("Missing wifi.ssid in config.ini")
+        if "password" not in config["wifi"]:
+            raise ValueError("Missing wifi.password in config.ini")
+
+        # Set defaults for optional fields
+        if "ntp" not in config:
+            config["ntp"] = {}
+        config["ntp"].setdefault("server", "pool.ntp.org")
+        config["ntp"].setdefault("timezone_offset", "0")
+
+        print("✓ Config loaded successfully")
+        return config
+
+    except FileNotFoundError:
+        print("✗ Error: config.ini not found")
+        raise
+    except Exception as e:
+        print(f"✗ Error parsing config.ini: {e}")
+        raise
+
+
+def display_status(message):
+    """Display status message on LED matrix.
+
+    For long messages, truncates to fit the display width.
+    """
+    print(message)
+
+    # Clear main group by creating a new one
+    global main_group
+    main_group = displayio.Group()
+    display.root_group = main_group
+
+    # Create status label
+    try:
+        # Truncate long messages to fit display (roughly 12-15 chars for 64px width)
+        # Leave room for "..." if truncated
+        max_chars = 14
+        if len(message) > max_chars:
+            display_message = message[: max_chars - 3] + "..."
+        else:
+            display_message = message
+
+        status_label = Label(font_small, text=display_message, color=WHITE, x=2, y=32)
+        main_group.append(status_label)
+        display.refresh()
+    except Exception as e:
+        print(f"✗ Display error: {e}")
+        # Still try to continue
+
+    gc.collect()
+
+
+def connect_wifi(ssid, password):
+    """Connect to WiFi and return (ip_address, requests) tuple or None on failure."""
+    display_status("Connecting...")
+    time.sleep(1)
+
+    try:
+        # Validate inputs
+        if not ssid or not password:
+            print("✗ Connection failed: ssid and password required")
+            display_status("WiFi failed")
+            return None
+
+        # Connect to network
+        print(f"Connecting to {ssid}...")
+        wifi.radio.connect(ssid, password)
+
+        # Wait for connection (max 10 seconds)
+        timeout = time.monotonic() + 10
+        while not wifi.radio.connected and time.monotonic() < timeout:
+            time.sleep(0.1)
+
+        if not wifi.radio.connected:
+            print(f"✗ Connection failed: timeout after 10s")
+            display_status("WiFi failed")
+            return None
+
+        # Get IP address
+        ip_address = wifi.radio.ipv4_address
+        print(f"✓ Connected, my IP is {ip_address}")
+        display_status(f"Connected: {ip_address}")
+        time.sleep(1)  # Show success message for 1 second
+
+        # Create socket pool for requests
+        pool = socketpool.SocketPool(wifi.radio)
+        requests = Session(pool)
+        gc.collect()
+
+        return ip_address, requests
+
+    except Exception as e:
+        print(f"✗ Connection failed: {e}")
+        display_status("WiFi failed")
+        return None
+
+
+def sync_ntp(server):
+    """Sync time from NTP server and return struct_time or None on failure."""
+    print(f"Setup: syncing NTP from {server}...")
+    display_status("Syncing...")
+
+    try:
+        # Create socket pool for NTP
+        pool = socketpool.SocketPool(wifi.radio)
+
+        # Create NTP client (tz_offset=0 means UTC)
+        ntp = adafruit_ntp.NTP(pool, server=server, tz_offset=0)
+
+        # Get NTP time as struct_time
+        ntp_time = ntp.datetime
+
+        # Convert to Unix timestamp for drift calculation
+        # time.mktime() converts struct_time to Unix timestamp
+        unix_timestamp = time.mktime(ntp_time)
+
+        print(f"✓ NTP sync successful")
+        return ntp_time, unix_timestamp
+
+    except Exception as e:
+        print(f"✗ NTP sync failed: {e}")
+        display_status("NTP failed")
+        return None, None
+
+
+def apply_timezone(unix_timestamp, offset_hours):
+    """Apply timezone offset to UTC Unix timestamp.
+
+    Converts a UTC Unix timestamp to local time by applying timezone offset.
+
+    Args:
+        unix_timestamp: Unix timestamp (seconds since epoch, UTC)
+        offset_hours: Timezone offset in hours (e.g., 8 for UTC+8)
+
+    Returns:
+        struct_time: Local time as struct_time object
+    """
+    # Validate offset_hours
+    if not isinstance(offset_hours, (int, float)):
+        raise TypeError(f"offset_hours must be numeric, got {type(offset_hours)}")
+
+    if offset_hours < -12 or offset_hours > 14:
+        raise ValueError(
+            f"offset_hours must be between -12 and +14, got {offset_hours}"
+        )
+
+    # Apply offset (convert hours to seconds)
+    offset_seconds = int(offset_hours * 3600)
+    local_ts = unix_timestamp + offset_seconds
+
+    # Convert to struct_time (use localtime since gmtime doesn't exist in CircuitPython)
+    return time.localtime(local_ts)
+
+
+def calculate_drift(rtc_unix_timestamp, ntp_unix_timestamp):
+    """Calculate time drift in seconds between RTC and NTP time.
+
+    Args:
+        rtc_unix_timestamp: RTC time as Unix timestamp (seconds since epoch)
+        ntp_unix_timestamp: NTP time as Unix timestamp (seconds since epoch)
+
+    Returns:
+        int: Drift in seconds (positive = NTP ahead of RTC)
+    """
+    return ntp_unix_timestamp - rtc_unix_timestamp
+
+
+def setup():
+    """Setup WiFi and NTP, return config and requests session."""
+    global last_ntp_sync
+
+    # Display setup message
+    display_status("Setup...")
+
+    # Load config
+    try:
+        config = load_config()
+    except Exception as e:
+        display_status("No config.ini")
+        while True:
+            time.sleep(1)  # Stop and wait
+
+    # Get config values
+    wifi_ssid = config["wifi"]["ssid"]
+    wifi_password = config["wifi"]["password"]
+    ntp_server = config.get("ntp", {}).get("server", "pool.ntp.org")
+    timezone_offset = config.get("ntp", {}).get("timezone_offset", "0")
+
+    # Validate timezone offset
+    try:
+        offset_hours = float(timezone_offset)
+        if offset_hours < -12 or offset_hours > 14:
+            raise ValueError(f"Invalid timezone offset: {offset_hours}")
+    except ValueError as e:
+        print(f"✗ Invalid timezone offset: {e}")
+        display_status("Invalid config")
+        while True:
+            time.sleep(1)  # Stop and wait
+
+    # Connect to WiFi
+    result = connect_wifi(wifi_ssid, wifi_password)
+    if result is None:
+        while True:
+            time.sleep(1)  # Stop and wait
+
+    ip_address, requests = result
+    gc.collect()
+
+    # Sync NTP
+    ntp_time, ntp_unix = sync_ntp(ntp_server)
+    if ntp_time is None:
+        while True:
+            time.sleep(1)  # Stop and wait
+
+    gc.collect()
+
+    # Calculate drift
+    current_rtc_time = time.localtime()
+    rtc_unix = int(time.mktime(current_rtc_time))
+    drift = calculate_drift(rtc_unix, ntp_unix)
+    print(f"Sync time via NTP, {drift:.3f}s drifted")
+
+    # Apply timezone
+    local_time = apply_timezone(ntp_unix, offset_hours)
+
+    # Update RTC
+    rtc.RTC().datetime = local_time
+    gc.collect()
+
+    # Set last NTP sync time
+    last_ntp_sync = time.monotonic()
+
+    # Ready to start
+    display_status("Ready!")
+    time.sleep(2)
+    display_status("")
+
+    return config, requests, offset_hours, ntp_server
+
+
+def attempt_ntp_sync(ntp_server, timezone_offset):
+    """Attempt NTP sync, return True on success, False on failure."""
+    global last_ntp_sync
+
+    try:
+        # Sync NTP
+        ntp_time, ntp_unix = sync_ntp(ntp_server)
+        if ntp_time is None:
+            return False
+
+        # Convert current_rtc_time to Unix timestamp
+        current_rtc_time = time.localtime()
+        rtc_unix = int(time.mktime(current_rtc_time))
+
+        # Calculate drift
+        drift = calculate_drift(rtc_unix, ntp_unix)
+        print(f"Sync time via NTP, {drift:.3f}s drifted")
+
+        # Apply timezone and update RTC
+        local_time = apply_timezone(ntp_unix, timezone_offset)
+        rtc.RTC().datetime = local_time
+
+        # Show success briefly
+        display_status("Time synced")
+        time.sleep(1)
+
+        # Update last NTP sync time
+        last_ntp_sync = time.monotonic()
+
+        gc.collect()
+        return True
+
+    except Exception as e:
+        print(f"✗ NTP sync failed: {e}")
+        display_status("NTP retry...")
+        return False
+
+
+displayio.release_displays()
 
 # === Setup for Pico ===
 # Setup rgbmatrix display (change pins to match your wiring)
@@ -100,6 +419,10 @@ celebration_colors = [
 # === Timing Parameters ===
 SCROLL_DELAY = 0.025
 SCROLL_STEP = 1
+
+# === NTP Sync Settings ===
+NTP_INTERVAL = 600  # Sync time every 10 minutes
+NTP_RETRY_DELAY = 60  # Wait 60 seconds before retrying failed NTP sync
 
 
 def get_time_string():
@@ -276,8 +599,36 @@ def fireworks_animation(duration=2.5, burst_count=5, sparks_per_burst=40):
 
 print("*** Running Pico HUB75 Code! ***")
 
+# Setup WiFi and NTP
+try:
+    config, requests, timezone_offset, ntp_server = setup()
+except Exception as e:
+    print(f"✗ Setup failed: {e}")
+    display_status("Setup failed")
+    while True:
+        time.sleep(1)  # Stop and wait
+
 # === Main Loop ===
 while True:
+    # Check NTP sync
+    current_time = time.monotonic()
+
+    if ntp_retry_active:
+        if current_time >= ntp_retry_time:
+            # Retry NTP sync
+            success = attempt_ntp_sync(ntp_server, timezone_offset)
+            if success:
+                ntp_retry_active = False
+            else:
+                ntp_retry_time = current_time + NTP_RETRY_DELAY
+    elif last_ntp_sync > 0 and current_time - last_ntp_sync >= NTP_INTERVAL:
+        # Normal periodic sync
+        success = attempt_ntp_sync(ntp_server, timezone_offset)
+        if not success:
+            ntp_retry_active = True
+            print(f"NTP sync failed, retrying in {NTP_RETRY_DELAY}s")
+            ntp_retry_time = current_time + NTP_RETRY_DELAY
+
     fireworks_animation(duration=2.5, burst_count=3, sparks_per_burst=40)
     for i, (msg1, msg2, logo_path, *optional_color) in enumerate(messages):
         try:
