@@ -106,6 +106,7 @@ def display_status(message):
 def connect_wifi(ssid, password):
     """Connect to WiFi and return (ip_address, requests) tuple or None on failure."""
     display_status("Connecting...")
+    time.sleep(1)
 
     try:
         # Validate inputs
@@ -132,6 +133,7 @@ def connect_wifi(ssid, password):
         ip_address = wifi.radio.ipv4_address
         print(f"✓ Connected, my IP is {ip_address}")
         display_status(f"Connected: {ip_address}")
+        time.sleep(10)
 
         # Create socket pool for requests
         pool = socketpool.SocketPool(wifi.radio)
