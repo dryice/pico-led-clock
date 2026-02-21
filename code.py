@@ -83,7 +83,10 @@ def load_config():
 
 
 def display_status(message):
-    """Display status message on LED matrix."""
+    """Display status message on LED matrix.
+
+    For long messages, truncates to fit the display width.
+    """
     print(message)
 
     # Clear main group by creating a new one
@@ -93,7 +96,15 @@ def display_status(message):
 
     # Create status label
     try:
-        status_label = Label(font_small, text=message, color=WHITE, x=2, y=32)
+        # Truncate long messages to fit display (roughly 12-15 chars for 64px width)
+        # Leave room for "..." if truncated
+        max_chars = 14
+        if len(message) > max_chars:
+            display_message = message[: max_chars - 3] + "..."
+        else:
+            display_message = message
+
+        status_label = Label(font_small, text=display_message, color=WHITE, x=2, y=32)
         main_group.append(status_label)
         display.refresh()
     except Exception as e:
@@ -133,7 +144,7 @@ def connect_wifi(ssid, password):
         ip_address = wifi.radio.ipv4_address
         print(f"✓ Connected, my IP is {ip_address}")
         display_status(f"Connected: {ip_address}")
-        time.sleep(10)
+        time.sleep(1)  # Show success message for 1 second
 
         # Create socket pool for requests
         pool = socketpool.SocketPool(wifi.radio)
@@ -312,6 +323,10 @@ def attempt_ntp_sync(ntp_server, timezone_offset):
         # Apply timezone and update RTC
         local_time = apply_timezone(ntp_unix, timezone_offset)
         rtc.RTC().datetime = local_time
+
+        # Show success briefly
+        display_status("Time synced")
+        time.sleep(1)
 
         # Update last NTP sync time
         last_ntp_sync = time.monotonic()
