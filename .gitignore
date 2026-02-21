@@ -5,3 +5,4 @@ config.ini
 docs/
 AGENTS.md
 *.mpy
+__pycache__
