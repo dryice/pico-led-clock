@@ -15,6 +15,11 @@ import rtc
 from adafruit_bitmap_font import bitmap_font
 from adafruit_display_text.label import Label
 
+import wifi_pool
+import wifi_radio
+from adafruit_requests import Session
+import socketpool
+
 displayio.release_displays()
 
 # === Setup for Pico ===
@@ -94,6 +99,10 @@ celebration_colors = [
 # === Timing Parameters ===
 SCROLL_DELAY = 0.025
 SCROLL_STEP = 1
+
+# === NTP Sync Settings ===
+NTP_INTERVAL = 600  # Sync time every 10 minutes
+NTP_RETRY_DELAY = 60  # Wait 60 seconds before retrying failed NTP sync
 
 
 def get_time_string():
