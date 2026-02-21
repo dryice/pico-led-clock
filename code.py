@@ -62,7 +62,11 @@ HEIGHT = display.height
 # Update year, month, day, hour, minute below as needed
 # CircuitPython will keep time running from this point
 current_time = time.struct_time((2025, 2, 21, 10, 30, 0, 0, -1, -1))
-rtc.RTC().datetime = current_time
+try:
+    rtc.RTC().datetime = current_time
+except Exception as e:
+    print(f"⚠️ RTC initialization failed: {e}")
+    print("Continuing with system time...")
 
 main_group = displayio.Group()
 display.root_group = main_group
@@ -97,13 +101,6 @@ celebration_colors = [
 SCROLL_DELAY = 0.025
 SCROLL_STEP = 1
 
-# === Messages: (line1, line2, image_path, optional_color)
-# You can add or remove elements from the messages lists, as you like.
-# Add a second line of text in the empty strings for a two-line message in smaller font
-messages = [
-    (get_time_string, "", None, None),  # Time display, no logo
-]
-
 
 def get_time_string():
     """Generate formatted time string: 'Mon Feb 21 10:30'"""
@@ -128,6 +125,14 @@ def get_time_string():
     month_name = months[t.tm_mon - 1]
 
     return f"{day_name} {month_name} {t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}"
+
+
+# === Messages: (line1, line2, image_path, optional_color)
+# You can add or remove elements from the messages lists, as you like.
+# Add a second line of text in the empty strings for a two-line message in smaller font
+messages = [
+    (get_time_string, "", None, None),  # Time display, no logo
+]
 
 
 def create_scroll_group(logo_path, text1, text2, color=None):
