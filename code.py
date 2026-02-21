@@ -155,15 +155,14 @@ def sync_ntp(server):
         # Create socket pool for NTP
         pool = socketpool.SocketPool(wifi.radio)
 
-        # Create NTP client
+        # Create NTP client (tz_offset=0 means UTC)
         ntp = adafruit_ntp.NTP(pool, server=server, tz_offset=0)
 
-        # Get NTP time
-        ntp_datetime = ntp.datetime
+        # Get NTP time as struct_time
+        ntp_time = ntp.datetime
 
         # Convert to Unix timestamp for drift calculation
-        # CircuitPython's time.mktime() expects a struct_time
-        ntp_time = time.struct_time(ntp_datetime[:8] + (0,))
+        # time.mktime() converts struct_time to Unix timestamp
         unix_timestamp = time.mktime(ntp_time)
 
         print(f"✓ NTP sync successful")
@@ -200,8 +199,8 @@ def apply_timezone(unix_timestamp, offset_hours):
     offset_seconds = int(offset_hours * 3600)
     local_ts = unix_timestamp + offset_seconds
 
-    # Convert to struct_time
-    return time.gmtime(local_ts)
+    # Convert to struct_time (use localtime since gmtime doesn't exist in CircuitPython)
+    return time.localtime(local_ts)
 
 
 def calculate_drift(rtc_unix_timestamp, ntp_unix_timestamp):
