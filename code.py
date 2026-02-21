@@ -198,28 +198,46 @@ def sync_ntp(server):
             gc.collect()
 
 
-def apply_timezone(time_struct, offset_hours):
-    """Apply timezone offset to UTC time."""
-    # Convert to Unix timestamp
-    unix_ts = time.mktime(time_struct)
+def apply_timezone(unix_timestamp, offset_hours):
+    """Apply timezone offset to UTC Unix timestamp.
+
+    Converts a UTC Unix timestamp to local time by applying timezone offset.
+
+    Args:
+        unix_timestamp: Unix timestamp (seconds since epoch, UTC)
+        offset_hours: Timezone offset in hours (e.g., 8 for UTC+8)
+
+    Returns:
+        struct_time: Local time as struct_time object
+    """
+    # Validate offset_hours
+    if not isinstance(offset_hours, (int, float)):
+        raise TypeError(f"offset_hours must be numeric, got {type(offset_hours)}")
+
+    if offset_hours < -12 or offset_hours > 14:
+        raise ValueError(
+            f"offset_hours must be between -12 and +14, got {offset_hours}"
+        )
 
     # Apply offset (convert hours to seconds)
     offset_seconds = int(offset_hours * 3600)
-    local_ts = unix_ts + offset_seconds
+    local_ts = unix_timestamp + offset_seconds
 
-    # Convert back to struct_time
+    # Convert to struct_time
     return time.gmtime(local_ts)
 
 
-def calculate_drift(rtc_time, ntp_unix_time):
-    """Calculate time drift in seconds between RTC and NTP time."""
-    # Convert RTC to Unix timestamp
-    rtc_unix = time.mktime(rtc_time)
+def calculate_drift(rtc_unix_timestamp, ntp_unix_timestamp):
+    """Calculate time drift in seconds between RTC and NTP time.
 
-    # Calculate drift
-    drift = ntp_unix_time - rtc_unix
+    Args:
+        rtc_unix_timestamp: RTC time as Unix timestamp (seconds since epoch)
+        ntp_unix_timestamp: NTP time as Unix timestamp (seconds since epoch)
 
-    return drift
+    Returns:
+        int: Drift in seconds (positive = NTP ahead of RTC)
+    """
+    return ntp_unix_timestamp - rtc_unix_timestamp
 
 
 displayio.release_displays()
