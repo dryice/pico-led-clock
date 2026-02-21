@@ -317,7 +317,7 @@ def setup():
     return config, requests, offset_hours, ntp_server
 
 
-def attempt_ntp_sync(requests, ntp_server, timezone_offset):
+def attempt_ntp_sync(ntp_server, timezone_offset):
     """Attempt NTP sync, return True on success, False on failure."""
     global last_ntp_sync
 
@@ -327,26 +327,27 @@ def attempt_ntp_sync(requests, ntp_server, timezone_offset):
         if ntp_time is None:
             return False
 
-        # Calculate drift
+        # Convert current_rtc_time to Unix timestamp
         current_rtc_time = time.localtime()
-        drift = calculate_drift(current_rtc_time, ntp_unix)
+        rtc_unix = int(time.mktime(current_rtc_time))
+
+        # Calculate drift
+        drift = calculate_drift(rtc_unix, ntp_unix)
         print(f"NTP sync: Sync time via NTP, {drift:.2f}s drifted")
 
-        # Apply timezone
+        # Apply timezone and update RTC
         local_time = apply_timezone(ntp_unix, timezone_offset)
-
-        # Update RTC
         rtc.RTC().datetime = local_time
 
-        # Update last sync time
+        # Update last NTP sync time
         last_ntp_sync = time.monotonic()
 
+        gc.collect()
         return True
 
     except Exception as e:
         print(f"✗ NTP sync failed: {e}")
         display_status("NTP retry...")
-        time.sleep(2)  # Show message briefly
         return False
 
 
@@ -620,20 +621,22 @@ except Exception as e:
 
 # === Main Loop ===
 while True:
+    global ntp_retry_active, ntp_retry_time
+
     # Check NTP sync
     current_time = time.monotonic()
 
     if ntp_retry_active:
         if current_time >= ntp_retry_time:
             # Retry NTP sync
-            success = attempt_ntp_sync(requests, ntp_server, timezone_offset)
+            success = attempt_ntp_sync(ntp_server, timezone_offset)
             if success:
                 ntp_retry_active = False
             else:
                 ntp_retry_time = current_time + NTP_RETRY_DELAY
     elif last_ntp_sync > 0 and current_time - last_ntp_sync >= NTP_INTERVAL:
         # Normal periodic sync
-        success = attempt_ntp_sync(requests, ntp_server, timezone_offset)
+        success = attempt_ntp_sync(ntp_server, timezone_offset)
         if not success:
             ntp_retry_active = True
             print(f"NTP sync failed, retrying in {NTP_RETRY_DELAY}s")
