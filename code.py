@@ -21,6 +21,51 @@ import wifi_radio
 from adafruit_requests import Session
 import socketpool
 
+
+def load_config():
+    """Load config.ini and return dictionary of settings."""
+    print("Setup: reading config.ini...")
+
+    try:
+        config = {}
+        current_section = None
+
+        with open("/config.ini", "r") as f:
+            for line in f:
+                line = line.strip()
+
+                # Skip comments and empty lines
+                if not line or line.startswith("#"):
+                    continue
+
+                # Section headers
+                if line.startswith("[") and line.endswith("]"):
+                    current_section = line[1:-1].lower()
+                    config[current_section] = {}
+                    continue
+
+                # Key-value pairs
+                if "=" in line and current_section:
+                    key, value = line.split("=", 1)
+                    config[current_section][key.strip().lower()] = value.strip()
+
+        # Validate required fields
+        if "wifi" not in config or "ssid" not in config["wifi"]:
+            raise ValueError("Missing wifi.ssid in config.ini")
+        if "wifi" not in config or "password" not in config["wifi"]:
+            raise ValueError("Missing wifi.password in config.ini")
+
+        print("✓ Config loaded successfully")
+        return config
+
+    except FileNotFoundError:
+        print("✗ Error: config.ini not found")
+        raise
+    except Exception as e:
+        print(f"✗ Error parsing config.ini: {e}")
+        raise
+
+
 displayio.release_displays()
 
 # === Setup for Pico ===
