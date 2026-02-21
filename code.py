@@ -284,12 +284,15 @@ def setup():
             time.sleep(1)  # Stop and wait
 
     ip_address, requests = result
+    gc.collect()
 
     # Sync NTP
     ntp_time, ntp_unix = sync_ntp(ntp_server)
     if ntp_time is None:
         while True:
             time.sleep(1)  # Stop and wait
+
+    gc.collect()
 
     # Calculate drift
     current_rtc_time = time.localtime()
@@ -302,6 +305,7 @@ def setup():
 
     # Update RTC
     rtc.RTC().datetime = local_time
+    gc.collect()
 
     # Set last NTP sync time
     last_ntp_sync = time.monotonic()
