@@ -10,6 +10,8 @@
 # and the library named adafruit_ticks.mpy
 
 import board, displayio, time, gc, random, math, rgbmatrix, framebufferio
+import rtc
+
 # If you use a Matrix Portal S3, you'll need to import the coe below,
 # from adafruit_matrixportal.matrixportal import MatrixPortal
 from adafruit_bitmap_font import bitmap_font
@@ -24,23 +26,23 @@ displayio.release_displays()
 # === Setup for Pico ===
 # Setup rgbmatrix display (change pins to match your wiring)
 matrix = rgbmatrix.RGBMatrix(
-    width=64, # Change width & height if you have an LED matrix with different dimensions
+    width=64,  # Change width & height if you have an LED matrix with different dimensions
     height=64,
     bit_depth=6,
-    rgb_pins=[ # Preserve GP4 & GP5 for standard STEMMA-QT
-        board.GP2,   # R1
-        board.GP3,   # G1
-        board.GP6,   # B1
-        board.GP7,   # R2
-        board.GP8,   # G2
-        board.GP9    # B2
+    rgb_pins=[  # Preserve GP4 & GP5 for standard STEMMA-QT
+        board.GP2,  # R1
+        board.GP3,  # G1
+        board.GP6,  # B1
+        board.GP7,  # R2
+        board.GP8,  # G2
+        board.GP9,  # B2
     ],
     addr_pins=[
         board.GP10,  # A
         board.GP16,  # B
         board.GP18,  # C
         board.GP20,  # D
-        board.GP21   # E
+        board.GP21,  # E
     ],
     clock_pin=board.GP11,
     latch_pin=board.GP12,
@@ -64,20 +66,25 @@ font_small = bitmap_font.load_font("/fonts/helvB08.bdf")
 font_large = bitmap_font.load_font("/fonts/helvB12.bdf")
 
 # === COLOR VARIABLES ===
-WHITE         = 0xFFFFFF
-SOFT_RED      = 0xCC4444
-DEEP_CORAL    = 0xFF6F61
-PEACH         = 0xFFDAB9
-WARM_GOLD     = 0xFFD700
-GOLDENROD     = 0xDAA520
-TANGERINE     = 0xFFA07A
+WHITE = 0xFFFFFF
+SOFT_RED = 0xCC4444
+DEEP_CORAL = 0xFF6F61
+PEACH = 0xFFDAB9
+WARM_GOLD = 0xFFD700
+GOLDENROD = 0xDAA520
+TANGERINE = 0xFFA07A
 
 # Lean firework colors toward warm tones
 firework_colors = [WHITE, GOLDENROD, WARM_GOLD, DEEP_CORAL, SOFT_RED, TANGERINE]
 
 celebration_colors = [
-    WHITE, GOLDENROD, WARM_GOLD, DEEP_CORAL,
-    SOFT_RED, TANGERINE, PEACH
+    WHITE,
+    GOLDENROD,
+    WARM_GOLD,
+    DEEP_CORAL,
+    SOFT_RED,
+    TANGERINE,
+    PEACH,
 ]
 
 # === Timing Parameters ===
@@ -88,11 +95,12 @@ SCROLL_STEP = 1
 # You can add or remove elements from the messages lists, as you like.
 # Add a second line of text in the empty strings for a two-line message in smaller font
 messages = [
-    (" Hello Theodore! ",  " How are you? ", "/graphics/robot.bmp", GOLDENROD),
+    (" Hello Theodore! ", " How are you? ", "/graphics/robot.bmp", GOLDENROD),
     (" I changed it! ", "", "/graphics/cool-emoji.bmp", SOFT_RED),
     (" It's pretty fun! ", "", "/graphics/swift-logo.bmp", WARM_GOLD),
-    (" Come and join me! ",  "", "/graphics/globe.bmp", DEEP_CORAL)
+    (" Come and join me! ", "", "/graphics/globe.bmp", DEEP_CORAL),
 ]
+
 
 def create_scroll_group(logo_path, text1, text2, color=None):
     group = displayio.Group()
@@ -111,10 +119,7 @@ def create_scroll_group(logo_path, text1, text2, color=None):
         try:
             logo_bitmap = displayio.OnDiskBitmap(logo_path)
             logo_tilegrid = displayio.TileGrid(
-                logo_bitmap,
-                pixel_shader=logo_bitmap.pixel_shader,
-                x=2,
-                y=33
+                logo_bitmap, pixel_shader=logo_bitmap.pixel_shader, x=2, y=33
             )
             group.append(logo_tilegrid)
             logo_width = logo_tilegrid.width
@@ -142,10 +147,7 @@ def create_scroll_group(logo_path, text1, text2, color=None):
         # label2.y = 54
         group.append(label2)
 
-        text_width = max(
-            label1.bounding_box[2],
-            label2.bounding_box[2]
-        )
+        text_width = max(label1.bounding_box[2], label2.bounding_box[2])
 
     total_width = text_start + text_width
 
@@ -157,7 +159,7 @@ def create_scroll_group(logo_path, text1, text2, color=None):
                 logo_bitmap,
                 pixel_shader=logo_bitmap.pixel_shader,
                 x=text_start + text_width,
-                y=0
+                y=0,
             )
             group.append(second_logo)
             total_width += second_logo.width + 1  # Ensure full scroll off screen
@@ -166,8 +168,9 @@ def create_scroll_group(logo_path, text1, text2, color=None):
 
     return group, total_width
 
+
 def fireworks_animation(duration=2.5, burst_count=5, sparks_per_burst=40):
-    print("\U0001F386 Multi Fireworks Burst")
+    print("\U0001f386 Multi Fireworks Burst")
     animation_group = displayio.Group()
     main_group.append(animation_group)
 
@@ -191,16 +194,18 @@ def fireworks_animation(duration=2.5, burst_count=5, sparks_per_burst=40):
             pal[0] = base_color
             pixel = displayio.TileGrid(bmp, pixel_shader=pal, x=cx, y=cy)
 
-            sparks.append({
-                "sprite": pixel,
-                "x": float(cx),
-                "y": float(cy),
-                "dx": dx,
-                "dy": dy,
-                "life": random.randint(15, 25),
-                "color": base_color,
-                "delay": launch_delay
-            })
+            sparks.append(
+                {
+                    "sprite": pixel,
+                    "x": float(cx),
+                    "y": float(cy),
+                    "dx": dx,
+                    "dy": dy,
+                    "life": random.randint(15, 25),
+                    "color": base_color,
+                    "delay": launch_delay,
+                }
+            )
             animation_group.append(pixel)
 
     gravity = 0.15
@@ -235,6 +240,7 @@ def fireworks_animation(duration=2.5, burst_count=5, sparks_per_burst=40):
     main_group.remove(animation_group)
     gc.collect()
 
+
 print("*** Running Pico HUB75 Code! ***")
 
 # === Main Loop ===
@@ -244,7 +250,9 @@ while True:
         try:
             gc.collect()
             color = optional_color[0] if optional_color else None
-            scroll_group, content_width = create_scroll_group(logo_path, msg1, msg2, color)
+            scroll_group, content_width = create_scroll_group(
+                logo_path, msg1, msg2, color
+            )
             scroll_group.x = WIDTH
             main_group.append(scroll_group)
 
@@ -258,7 +266,7 @@ while True:
             time.sleep(0.5)
 
         except MemoryError:
-            print("\U0001F4A5 MemoryError! Trying to recover...")
+            print("\U0001f4a5 MemoryError! Trying to recover...")
             main_group = displayio.Group()
             display.root_group = main_group
             gc.collect()
