@@ -83,13 +83,13 @@ def display_status(message):
 
     # Clear main group
     main_group.clear()
-    main_group.append(displayio.Group())
 
     # Create status label
     status_label = Label(font_small, text=message, color=WHITE, x=2, y=32)
 
     main_group.append(status_label)
     display.refresh()
+    gc.collect()
 
 
 displayio.release_displays()
