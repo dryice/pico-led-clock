@@ -99,16 +99,20 @@ def display_status(message):
 
     # Create status label
     try:
-        # Newline messages if its too long
+        # Scroll message if its too long
         max_chars = 10
-        if len(message) > max_chars:
-            for i in range(len(message) // max_chars + 1):
-                display_message += message[i * max_chars:(i + 1) * max_chars] + "\n"
-        else:
-            display_message = message
+        display_message = message
 
-        status_label = Label(font_small, text=display_message, color=WHITE, x=2, y=5)
+        if len(display_message) > max_chars:
+            for i in range(len(display_message) * 8 - 64):
+                status_label = Label(font_small, text=display_message, color = (255, 255, 255), x = 2 - i, y = 55)
+                main_group.append(status_label)
+                time.sleep(0.05)
+                display.refresh()
+        
+        status_label = Label(font_small, text=display_message, color = (255, 255, 255), x = 2, y = 55)
         main_group.append(status_label)
+        time.sleep(0.5)
         display.refresh()
     except Exception as e:
         print(f"✗ Display error: {e}")
