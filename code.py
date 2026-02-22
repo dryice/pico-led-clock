@@ -629,7 +629,7 @@ while True:
             print(f"NTP sync failed, retrying in {NTP_RETRY_DELAY}s")
             ntp_retry_time = current_time + NTP_RETRY_DELAY
 
-    fireworks_animation(duration=2.5, burst_count=3, sparks_per_burst=40)
+    fireworks_animation(duration = 2.5, burst_count = 3, sparks_per_burst = 40)
     for i, (msg1, msg2, logo_path, *optional_color) in enumerate(messages):
         try:
             gc.collect()
