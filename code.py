@@ -83,6 +83,9 @@ def load_config():
 
 
 def display_status(message):
+
+    display_message = ""
+
     """Display status message on LED matrix.
 
     For long messages, truncates to fit the display width.
@@ -96,15 +99,15 @@ def display_status(message):
 
     # Create status label
     try:
-        # Truncate long messages to fit display (roughly 12-15 chars for 64px width)
-        # Leave room for "..." if truncated
-        max_chars = 14
+        # Newline messages if its too long
+        max_chars = 10
         if len(message) > max_chars:
-            display_message = message[: max_chars - 3] + "..."
+            for i in range(len(message) // max_chars + 1):
+                display_message += message[i * max_chars:(i + 1) * max_chars] + "\n"
         else:
             display_message = message
 
-        status_label = Label(font_small, text=display_message, color=WHITE, x=2, y=32)
+        status_label = Label(font_small, text=display_message, color=WHITE, x=2, y=5)
         main_group.append(status_label)
         display.refresh()
     except Exception as e:
