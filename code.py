@@ -104,7 +104,7 @@ def display_status(message):
         else:
             display_message = message
 
-        status_label = Label(font_small, text=display_message, color=WHITE, x=2, y=32)
+        status_label = Label(font_small, text=display_message, color=WHITE, x=2, y=48)
         main_group.append(status_label)
         display.refresh()
     except Exception as e:
