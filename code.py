@@ -83,6 +83,9 @@ def load_config():
 
 
 def display_status(message):
+
+    display_message = ""
+
     """Display status message on LED matrix.
 
     For long messages, truncates to fit the display width.
@@ -96,16 +99,20 @@ def display_status(message):
 
     # Create status label
     try:
-        # Truncate long messages to fit display (roughly 12-15 chars for 64px width)
-        # Leave room for "..." if truncated
-        max_chars = 14
-        if len(message) > max_chars:
-            display_message = message[: max_chars - 3] + "..."
-        else:
-            display_message = message
+        # Scroll message if its too long
+        max_chars = 10
+        display_message = message
 
-        status_label = Label(font_small, text=display_message, color=WHITE, x=2, y=32)
+        if len(display_message) > max_chars:
+            for i in range(len(display_message) * 8 - 64):
+                status_label = Label(font_small, text=display_message, color = (255, 255, 255), x = 2 - i, y = 55)
+                main_group.append(status_label)
+                time.sleep(0.05)
+                display.refresh()
+        
+        status_label = Label(font_small, text=display_message, color = (255, 255, 255), x = 2, y = 55)
         main_group.append(status_label)
+        time.sleep(0.5)
         display.refresh()
     except Exception as e:
         print(f"✗ Display error: {e}")
@@ -629,7 +636,7 @@ while True:
             print(f"NTP sync failed, retrying in {NTP_RETRY_DELAY}s")
             ntp_retry_time = current_time + NTP_RETRY_DELAY
 
-    fireworks_animation(duration=2.5, burst_count=3, sparks_per_burst=40)
+    fireworks_animation(duration = 2.5, burst_count = 3, sparks_per_burst = 40)
     for i, (msg1, msg2, logo_path, *optional_color) in enumerate(messages):
         try:
             gc.collect()
