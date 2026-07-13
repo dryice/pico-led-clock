@@ -437,7 +437,6 @@ celebration_colors = [
 ]
 
 # === Timing Parameters ===
-SCROLL_DELAY = 0.025
 SCROLL_STEP = 1
 STATIC_MESSAGE_SECONDS = 5
 
@@ -474,7 +473,6 @@ CLOCK_DIGIT_GAP = 1
 CLOCK_COLOR = WARM_GOLD
 CLOCK_BACKGROUND_INDEX = 0
 CLOCK_FOREGROUND_INDEX = 1
-CLOCK_TEXT_WIDTH = 56
 CLOCK_TEXT_START_X = 4
 CLOCK_TEXT_START_Y = 6
 
@@ -832,7 +830,7 @@ def step_message(message_state, now):
 # Only the first element (text) is displayed. Logos are skipped in the 16px band.
 # You can add or remove elements from the messages list as you like.
 messages = [
-    ('→', '', None, WHITE),
+    ('->', '', None, WHITE),
 ]
 
 
@@ -904,7 +902,7 @@ def create_scroll_group(logo_path, text1, text2, color=None):
 
 
 def create_fireworks_state():
-    fireworks_group = displayio.Group()
+    fireworks_group = displayio.Group(max_size=FIREWORK_POOL_SIZE)
     sparks = []
 
     for _ in range(FIREWORK_POOL_SIZE):
@@ -1000,7 +998,7 @@ def build_clock_scene():
     except Exception:
         pass
 
-    main_group = displayio.Group()
+    main_group = displayio.Group(max_size=8)
     display.root_group = main_group
 
     fireworks_state = create_fireworks_state()
