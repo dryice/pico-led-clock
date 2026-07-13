@@ -736,6 +736,9 @@ def step_message(message_state, now):
     Returns:
         bool: True if message group should remain displayed, False if completed
     """
+    if not message_state["messages"]:
+        return True
+
     msg_fits = message_state["msg_fits"]
     msg_label = message_state["msg_label"]
     msg_group = message_state["msg_group"]
