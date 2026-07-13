@@ -936,7 +936,7 @@ def create_scroll_group(logo_path, text1, text2, color=None):
 
 
 def create_fireworks_state():
-    fireworks_group = displayio.Group(max_size=FIREWORK_POOL_SIZE)
+    fireworks_group = displayio.Group()
     sparks = []
 
     for _ in range(FIREWORK_POOL_SIZE):
@@ -1032,7 +1032,7 @@ def build_clock_scene():
     except Exception:
         pass
 
-    main_group = displayio.Group(max_size=8)
+    main_group = displayio.Group()
     display.root_group = main_group
 
     fireworks_state = create_fireworks_state()
@@ -1121,12 +1121,21 @@ except Exception as e:
         time.sleep(1)  # Stop and wait
 
 # Build persistent layered scene
+gc.collect()  # Free memory from setup() before allocating scene objects
+print(f"Free memory before scene build: {gc.mem_free()} bytes")
 try:
     scene_state = build_clock_scene()
-except MemoryError:
-    print("\U0001f4a5 MemoryError while building scene, retrying...")
-    gc.collect()
-    scene_state = build_clock_scene()
+except Exception as e:
+    print(f"✗ Scene build failed: {e}")
+    import traceback
+    traceback.print_exception(type(e), e, e.__traceback__)
+    # Show error on LED matrix for diagnosis without serial console
+    try:
+        display_status(f"Err:{str(e)[:10]}")
+    except Exception:
+        pass
+    while True:
+        time.sleep(1)  # Stop and wait
 # === Main Loop ===
 while True:
     try:
