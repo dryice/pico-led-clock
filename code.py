@@ -674,6 +674,17 @@ def init_message_state(messages=None):
     if messages is None:
         messages = globals().get("messages", [])
 
+    if not messages:
+        empty_group = displayio.Group()
+        return {
+            "messages": [],
+            "msg_index": 0,
+            "msg_group": empty_group,
+            "msg_label": None,
+            "msg_fits": True,
+            "msg_display_time": time.monotonic(),
+        }
+
     # Get first message
     msg1, msg2, logo_path, *optional_color = messages[0]
 
@@ -817,9 +828,9 @@ def step_message(message_state, now):
         return True
 
 
-# === Messages: (line1, line2, image_path, optional_color)
-# You can add or remove elements from the messages lists, as you like.
-# Add a second line of text in the empty strings for a two-line message in smaller font
+# === Messages: (text, unused, logo_path, optional_color)
+# Only the first element (text) is displayed. Logos are skipped in the 16px band.
+# You can add or remove elements from the messages list as you like.
 messages = [
     ('→', '', None, WHITE),
 ]
@@ -1052,6 +1063,7 @@ def update_date_label(state):
     label = state["date_label"]
     label.text = get_date_string()
     label.x = (WIDTH - label.bounding_box[2]) // 2
+    label.y = TOP_BAND_Y - label.bounding_box[1] + (TOP_BAND_HEIGHT - label.bounding_box[3]) // 2
     state["last_date_day"] = current_time.tm_mday
 
 
