@@ -27,6 +27,12 @@ ntp_retry_active = False
 ntp_retry_time = 0
 STARTUP_RETRY_DELAY = 10
 
+# Display mode: "setup" = full-screen multi-line log, "clock" = bottom-quarter single line
+display_mode = "setup"
+status_history = []
+STATUS_HISTORY_MAX = 5
+STATUS_DIM = 0x888888
+
 
 def load_config():
     """Load config.ini and return dictionary of settings."""
@@ -86,31 +92,57 @@ def load_config():
 def display_status(message):
     """Display status message on LED matrix.
 
-    For long messages, truncates to fit the display width.
+    In "setup" mode: shows a multi-line status log on the full screen
+    (newest at top in white, history below in dim gray).
+    In "clock" mode: shows a single truncated line in the bottom quarter
+    (y=48) to avoid covering the clock display.
     """
+    global main_group, status_history
     print(message)
 
+    # Track history for setup-mode log
+    status_history.append(message)
+    status_history = status_history[-STATUS_HISTORY_MAX:]
+
     # Clear main group by creating a new one
-    global main_group
     main_group = displayio.Group()
     display.root_group = main_group
 
-    # Create status label
-    try:
-        # Truncate long messages to fit display (roughly 12-15 chars for 64px width)
-        # Leave room for "..." if truncated
-        max_chars = 14
-        if len(message) > max_chars:
-            display_message = message[: max_chars - 3] + "..."
-        else:
-            display_message = message
+    max_chars = 14
 
-        status_label = Label(font_small, text=display_message, color=WHITE, x=2, y=48)
-        main_group.append(status_label)
+    try:
+        if display_mode == "setup":
+            # Full screen: show status history log, newest at top
+            line_spacing = 12
+            y_start = 6
+            for i, msg in enumerate(reversed(status_history)):
+                y = y_start + (i * line_spacing)
+                if y >= 64:
+                    break
+
+                if len(msg) > max_chars:
+                    display_msg = msg[: max_chars - 3] + "..."
+                else:
+                    display_msg = msg
+
+                color = WHITE if i == 0 else STATUS_DIM
+                label = Label(font_small, text=display_msg, color=color, x=2, y=y)
+                main_group.append(label)
+        else:
+            # Clock mode: single line in bottom quarter only
+            if len(message) > max_chars:
+                display_message = message[: max_chars - 3] + "..."
+            else:
+                display_message = message
+
+            status_label = Label(
+                font_small, text=display_message, color=WHITE, x=2, y=48
+            )
+            main_group.append(status_label)
+
         display.refresh()
     except Exception as e:
         print(f"✗ Display error: {e}")
-        # Still try to continue
 
     gc.collect()
 
@@ -1136,6 +1168,10 @@ except Exception as e:
         pass
     while True:
         time.sleep(1)  # Stop and wait
+
+# Clock scene is live — switch display to bottom-quarter-only mode
+display_mode = "clock"
+
 # === Main Loop ===
 while True:
     try:
