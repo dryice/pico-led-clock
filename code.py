@@ -159,10 +159,14 @@ def connect_wifi(ssid, password):
         return None
 
 
-def sync_ntp(server):
+def sync_ntp(server, show_status=True):
     """Sync time from NTP server and return struct_time or None on failure."""
-    print(f"Setup: syncing NTP from {server}...")
-    display_status("Syncing...")
+    if show_status:
+        print(f"Setup: syncing NTP from {server}...")
+    else:
+        print(f"Syncing NTP from {server}...")
+    if show_status:
+        display_status("Syncing...")
 
     try:
         # Create socket pool for NTP
@@ -183,7 +187,8 @@ def sync_ntp(server):
 
     except Exception as e:
         print(f"✗ NTP sync failed: {e}")
-        display_status("NTP failed")
+        if show_status:
+            display_status("NTP failed")
         return None, None
 
 
@@ -302,13 +307,13 @@ def setup():
     return config, requests, offset_hours, ntp_server
 
 
-def attempt_ntp_sync(ntp_server, timezone_offset):
+def attempt_ntp_sync(ntp_server, timezone_offset, show_status=True):
     """Attempt NTP sync, return True on success, False on failure."""
     global last_ntp_sync
 
     try:
         # Sync NTP
-        ntp_time, ntp_unix = sync_ntp(ntp_server)
+        ntp_time, ntp_unix = sync_ntp(ntp_server, show_status)
         if ntp_time is None:
             return False
 
@@ -324,9 +329,9 @@ def attempt_ntp_sync(ntp_server, timezone_offset):
         local_time = apply_timezone(ntp_unix, timezone_offset)
         rtc.RTC().datetime = local_time
 
-        # Show success briefly
-        display_status("Time synced")
-        time.sleep(1)
+        if show_status:
+            display_status("Time synced")
+            time.sleep(1)
 
         # Update last NTP sync time
         last_ntp_sync = time.monotonic()
@@ -336,7 +341,8 @@ def attempt_ntp_sync(ntp_server, timezone_offset):
 
     except Exception as e:
         print(f"✗ NTP sync failed: {e}")
-        display_status("NTP retry...")
+        if show_status:
+            display_status("NTP retry...")
         return False
 
 
@@ -377,6 +383,11 @@ display = framebufferio.FramebufferDisplay(matrix)
 WIDTH = display.width
 HEIGHT = display.height
 
+# === Firework Constants ===
+FIREWORK_POOL_SIZE = 48
+FIREWORK_BURST_INTERVAL = 1.2
+FIREWORK_DIM_DIVISOR = 4
+
 # === Set Initial Time ===
 # Update year, month, day, hour, minute below as needed
 # CircuitPython will keep time running from this point
@@ -403,8 +414,17 @@ WARM_GOLD = 0xFFD700
 GOLDENROD = 0xDAA520
 TANGERINE = 0xFFA07A
 
+
+def dim_color(color):
+    r = ((color >> 16) & 0xFF) // FIREWORK_DIM_DIVISOR
+    g = ((color >> 8) & 0xFF) // FIREWORK_DIM_DIVISOR
+    b = (color & 0xFF) // FIREWORK_DIM_DIVISOR
+    return (r << 16) | (g << 8) | b
+
+
 # Lean firework colors toward warm tones
 firework_colors = [WHITE, GOLDENROD, WARM_GOLD, DEEP_CORAL, SOFT_RED, TANGERINE]
+dim_firework_colors = [dim_color(c) for c in firework_colors]
 
 celebration_colors = [
     WHITE,
@@ -419,14 +439,143 @@ celebration_colors = [
 # === Timing Parameters ===
 SCROLL_DELAY = 0.025
 SCROLL_STEP = 1
+STATIC_MESSAGE_SECONDS = 5
+
+# === Layout Constants ===
+TOP_BAND_Y = 0
+TOP_BAND_HEIGHT = 16
+CLOCK_BAND_Y = 16
+CLOCK_BAND_HEIGHT = 32
+MESSAGE_BAND_Y = 48
+MESSAGE_BAND_HEIGHT = 16
+FRAME_DELAY = 0.05
 
 # === NTP Sync Settings ===
 NTP_INTERVAL = 600  # Sync time every 10 minutes
 NTP_RETRY_DELAY = 60  # Wait 60 seconds before retrying failed NTP sync
 
+# === Clock Bitmap Renderer ===
+CLOCK_DIGIT_GLYPHS = {
+    "0": ["111", "101", "101", "101", "111"],
+    "1": ["010", "110", "010", "010", "111"],
+    "2": ["111", "001", "111", "100", "111"],
+    "3": ["111", "001", "111", "001", "111"],
+    "4": ["101", "101", "111", "001", "001"],
+    "5": ["111", "100", "111", "001", "111"],
+    "6": ["111", "100", "111", "101", "111"],
+    "7": ["111", "001", "010", "010", "010"],
+    "8": ["111", "101", "111", "101", "111"],
+    "9": ["111", "101", "111", "001", "111"],
+    ":": ["000", "010", "000", "010", "000"],
+}
+
+CLOCK_DIGIT_SCALE = 4
+CLOCK_DIGIT_GAP = 1
+CLOCK_COLOR = WARM_GOLD
+CLOCK_BACKGROUND_INDEX = 0
+CLOCK_FOREGROUND_INDEX = 1
+CLOCK_TEXT_WIDTH = 56
+CLOCK_TEXT_START_X = 4
+CLOCK_TEXT_START_Y = 6
+
+
+def create_clock_bitmap():
+    clock_bitmap = displayio.Bitmap(WIDTH, CLOCK_BAND_HEIGHT, 2)
+    clock_palette = displayio.Palette(2)
+    clock_palette[CLOCK_BACKGROUND_INDEX] = 0x000000
+    clock_palette[CLOCK_FOREGROUND_INDEX] = CLOCK_COLOR
+    clock_palette.make_transparent(CLOCK_BACKGROUND_INDEX)
+    clock_tilegrid = displayio.TileGrid(
+        clock_bitmap,
+        pixel_shader=clock_palette,
+        x=0,
+        y=CLOCK_BAND_Y,
+    )
+    return clock_bitmap, clock_palette, clock_tilegrid
+
+
+def clear_clock_bitmap(clock_bitmap):
+    for y in range(CLOCK_BAND_HEIGHT):
+        for x in range(WIDTH):
+            clock_bitmap[x, y] = CLOCK_BACKGROUND_INDEX
+
+
+def draw_scaled_cell(clock_bitmap, x, y, scale):
+    for cell_y in range(scale):
+        for cell_x in range(scale):
+            clock_bitmap[x + cell_x, y + cell_y] = CLOCK_FOREGROUND_INDEX
+
+
+def draw_clock_text(clock_bitmap, text):
+    clear_clock_bitmap(clock_bitmap)
+    x = CLOCK_TEXT_START_X
+
+    for char in text[:5]:
+        glyph = CLOCK_DIGIT_GLYPHS.get(char)
+        if glyph is None:
+            x += (3 * CLOCK_DIGIT_SCALE) + CLOCK_DIGIT_GAP
+            continue
+
+        if char == ":":
+            for glyph_row in (1, 3):
+                draw_scaled_cell(
+                    clock_bitmap,
+                    x,
+                    CLOCK_TEXT_START_Y + (glyph_row * CLOCK_DIGIT_SCALE),
+                    CLOCK_DIGIT_SCALE,
+                )
+            x += CLOCK_DIGIT_SCALE
+        else:
+            for glyph_row, row in enumerate(glyph):
+                for glyph_col, pixel in enumerate(row):
+                    if pixel == "1":
+                        draw_scaled_cell(
+                            clock_bitmap,
+                            x + (glyph_col * CLOCK_DIGIT_SCALE),
+                            CLOCK_TEXT_START_Y + (glyph_row * CLOCK_DIGIT_SCALE),
+                            CLOCK_DIGIT_SCALE,
+                        )
+            x += 3 * CLOCK_DIGIT_SCALE
+
+        x += CLOCK_DIGIT_GAP
+
+
+clock_bitmap, clock_palette, clock_tilegrid = create_clock_bitmap()
+
+
+def get_date_string():
+    """Generate formatted date string: 'Mon Feb 21'"""
+    t = time.localtime()
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ]
+
+    day_name = days[t.tm_wday]
+    month_name = months[t.tm_mon - 1]
+
+    return f"{day_name} {month_name} {t.tm_mday}"
+
 
 def get_time_string():
-    """Generate formatted time string: 'Mon Feb 21 10:30'"""
+    """Generate formatted time string: 'HH:MM'"""
+    t = time.localtime()
+    return f"{t.tm_hour:02d}:{t.tm_min:02d}"
+
+
+def get_full_time_string():
+    """Generate formatted date and time string: 'Mon Feb 21 10:30'"""
     t = time.localtime()
     days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     months = [
@@ -450,11 +599,230 @@ def get_time_string():
     return f"{day_name} {month_name} {t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}"
 
 
+def _create_positioned_label(text, color=None):
+    """Create a label with proper color and vertical centering in y=48..63 band.
+
+    Internal helper for label creation. Lit pixels are vertically centered
+    within the 16px band.
+
+    Args:
+        text: String text to display
+        color: Optional color (defaults to random celebration color if None)
+
+    Returns:
+        Label: Positioned label ready to append to a group
+    """
+    label_color = color if color is not None else random.choice(celebration_colors)
+    label = Label(font_small, text=text, color=label_color)
+
+    # Position label to vertically center lit pixels within y=48..63 band
+    label.y = MESSAGE_BAND_Y - label.bounding_box[1] + (MESSAGE_BAND_HEIGHT - label.bounding_box[3]) // 2
+
+    return label
+
+
+def create_message_group(text, color=None):
+    """Create a displayio.Group with a label positioned in y=48..63 band.
+
+    The label is positioned with absolute bottom-band coordinates. The returned
+    group can be directly appended to main_group without extra y-offsets.
+
+    Lit pixels are vertically centered within the 16px band.
+
+    Args:
+        text: String text to display
+        color: Optional color (defaults to random celebration color if None)
+
+    Returns:
+        displayio.Group: Group with a positioned label child
+    """
+    group = displayio.Group()
+    label = _create_positioned_label(text, color)
+    group.append(label)
+
+    return group
+
+
+def message_fits(label):
+    """Check if label fits within display width.
+
+    Args:
+        label: A Label object with a bounding_box attribute
+
+    Returns:
+        bool: True if label width <= WIDTH, False otherwise
+    """
+    return label.bounding_box[2] <= WIDTH
+
+
+def init_message_state(messages=None):
+    """Initialize message state for bottom-band display.
+
+    Args:
+        messages: Optional list of message tuples (msg1, msg2, logo_path, optional_color).
+                  Defaults to module-level messages list if not provided.
+
+    Returns:
+        dict: Message state with keys:
+            - messages: The messages list
+            - msg_index: Current message index (0-based)
+            - msg_group: Persistent displayio.Group (never swapped)
+            - msg_label: Current Label within group
+            - msg_fits: Boolean, whether current message fits in width
+            - msg_display_time: When current message was first displayed (monotonic time)
+    """
+    if messages is None:
+        messages = globals().get("messages", [])
+
+    # Get first message
+    msg1, msg2, logo_path, *optional_color = messages[0]
+
+    # Skip logo if present
+    if logo_path:
+        print(f"Skipping logo in 16px message band: {logo_path}")
+
+    # Resolve callable messages
+    if callable(msg1):
+        msg1 = msg1()
+
+    # Create persistent group and label
+    color = optional_color[0] if optional_color else None
+    msg_group = create_message_group(msg1, color)
+    msg_label = msg_group[0]  # Get the label child
+
+    # Determine if message fits
+    fits = message_fits(msg_label)
+
+    # Position label
+    if fits:
+        # Center horizontally
+        msg_label.x = (WIDTH - msg_label.bounding_box[2]) // 2
+        # y already positioned by create_message_group() using bounding-box offset
+    else:
+        # Start at right edge for scrolling
+        msg_label.x = WIDTH
+        # y already positioned by create_message_group() using bounding-box offset
+
+    state = {
+        "messages": messages,
+        "msg_index": 0,
+        "msg_group": msg_group,
+        "msg_label": msg_label,
+        "msg_fits": fits,
+        "msg_display_time": time.monotonic(),
+    }
+
+    return state
+
+
+def step_message(message_state, now):
+    """Step message state, advancing to next message when current completes.
+
+    Keeps the persistent group object and mutates its child label on advance.
+
+    Args:
+        message_state: dict from init_message_state()
+        now: Current monotonic time
+
+    Returns:
+        bool: True if message group should remain displayed, False if completed
+    """
+    msg_fits = message_state["msg_fits"]
+    msg_label = message_state["msg_label"]
+    msg_group = message_state["msg_group"]
+
+    if msg_fits:
+        # Static message: check display duration
+        display_duration = now - message_state["msg_display_time"]
+        if display_duration >= STATIC_MESSAGE_SECONDS:
+            # Advance to next message
+            message_state["msg_index"] += 1
+            if message_state["msg_index"] >= len(message_state["messages"]):
+                return False
+
+            # Setup next message by mutating the persistent group
+            msg1, msg2, logo_path, *optional_color = message_state["messages"][message_state["msg_index"]]
+
+            # Skip logo if present
+            if logo_path:
+                print(f"Skipping logo in 16px message band: {logo_path}")
+
+            # Resolve callable messages
+            if callable(msg1):
+                msg1 = msg1()
+
+            # Remove old label, create new one using helper for proper defaults
+            msg_group.remove(msg_label)
+            color = optional_color[0] if optional_color else None
+            new_label = _create_positioned_label(msg1, color)
+            msg_group.append(new_label)
+
+            # Determine if message fits
+            fits = message_fits(new_label)
+            message_state["msg_fits"] = fits
+            message_state["msg_label"] = new_label
+
+            # Position label
+            if fits:
+                new_label.x = (WIDTH - new_label.bounding_box[2]) // 2
+            else:
+                new_label.x = WIDTH
+
+            message_state["msg_display_time"] = now
+
+        return True
+
+    else:
+        # Scrolling message: move left by SCROLL_STEP
+        msg_label.x -= SCROLL_STEP
+
+        # Check if scroll complete (x < -text_width)
+        text_width = msg_label.bounding_box[2]
+        if msg_label.x < -text_width:
+            # Advance to next message
+            message_state["msg_index"] += 1
+            if message_state["msg_index"] >= len(message_state["messages"]):
+                return False
+
+            # Setup next message by mutating the persistent group
+            msg1, msg2, logo_path, *optional_color = message_state["messages"][message_state["msg_index"]]
+
+            # Skip logo if present
+            if logo_path:
+                print(f"Skipping logo in 16px message band: {logo_path}")
+
+            # Resolve callable messages
+            if callable(msg1):
+                msg1 = msg1()
+
+            # Remove old label, create new one using helper for proper defaults
+            msg_group.remove(msg_label)
+            color = optional_color[0] if optional_color else None
+            new_label = _create_positioned_label(msg1, color)
+            msg_group.append(new_label)
+
+            # Determine if message fits
+            fits = message_fits(new_label)
+            message_state["msg_fits"] = fits
+            message_state["msg_label"] = new_label
+
+            # Position label
+            if fits:
+                new_label.x = (WIDTH - new_label.bounding_box[2]) // 2
+            else:
+                new_label.x = WIDTH
+
+            message_state["msg_display_time"] = now
+
+        return True
+
+
 # === Messages: (line1, line2, image_path, optional_color)
 # You can add or remove elements from the messages lists, as you like.
 # Add a second line of text in the empty strings for a two-line message in smaller font
 messages = [
-    (get_time_string, "", None, None),  # Time display, no logo
+    ('→', '', None, WHITE),
+    (get_full_time_string, '', None, PEACH),
 ]
 
 
@@ -525,76 +893,177 @@ def create_scroll_group(logo_path, text1, text2, color=None):
     return group, total_width
 
 
-def fireworks_animation(duration=2.5, burst_count=5, sparks_per_burst=40):
-    print("\U0001f386 Multi Fireworks Burst")
-    animation_group = displayio.Group()
-    main_group.append(animation_group)
-
-    start_time = time.monotonic()
+def create_fireworks_state():
+    fireworks_group = displayio.Group()
     sparks = []
 
-    for i in range(burst_count):
-        cx = random.randint(8, WIDTH - 8)
-        cy = random.randint(6, HEIGHT // 2)
-        base_color = random.choice(firework_colors)
-        launch_delay = i * 0.1
+    for _ in range(FIREWORK_POOL_SIZE):
+        bitmap = displayio.Bitmap(1, 1, 1)
+        palette = displayio.Palette(1)
+        palette[0] = 0x000000
+        sprite = displayio.TileGrid(bitmap, pixel_shader=palette, x=-1, y=-1)
+        fireworks_group.append(sprite)
+        sparks.append(
+            {
+                "sprite": sprite,
+                "palette": palette,
+                "x": -1.0,
+                "y": -1.0,
+                "dx": 0.0,
+                "dy": 0.0,
+                "life": 0,
+                "active": False,
+                "color": 0x000000,
+            }
+        )
 
-        for _ in range(sparks_per_burst):
-            angle = random.uniform(0, 2 * math.pi)
-            speed = random.uniform(1.5, 3.0)
-            dx = speed * math.cos(angle)
-            dy = speed * math.sin(angle) - 2.0
+    return {
+        "group": fireworks_group,
+        "sparks": sparks,
+        "last_burst_time": 0,
+        "next_spark_index": 0,
+    }
 
-            bmp = displayio.Bitmap(1, 1, 1)
-            pal = displayio.Palette(1)
-            pal[0] = base_color
-            pixel = displayio.TileGrid(bmp, pixel_shader=pal, x=cx, y=cy)
 
-            sparks.append(
-                {
-                    "sprite": pixel,
-                    "x": float(cx),
-                    "y": float(cy),
-                    "dx": dx,
-                    "dy": dy,
-                    "life": random.randint(15, 25),
-                    "color": base_color,
-                    "delay": launch_delay,
-                }
-            )
-            animation_group.append(pixel)
+def activate_spark(state, cx, cy, color):
+    spark = state["sparks"][state["next_spark_index"]]
+    state["next_spark_index"] = (state["next_spark_index"] + 1) % FIREWORK_POOL_SIZE
 
-    gravity = 0.15
+    angle = random.uniform(0, 2 * math.pi)
+    speed = random.uniform(1.5, 3.0)
+    spark["sprite"].x = cx
+    spark["sprite"].y = cy
+    spark["palette"][0] = color
+    spark["x"] = float(cx)
+    spark["y"] = float(cy)
+    spark["dx"] = speed * math.cos(angle)
+    spark["dy"] = speed * math.sin(angle) - 2.0
+    spark["life"] = random.randint(15, 25)
+    spark["active"] = True
+    spark["color"] = color
 
-    while time.monotonic() - start_time < duration + 1:
-        t = time.monotonic() - start_time
-        for spark in sparks:
-            if t < spark["delay"]:
-                continue
 
-            if spark["life"] <= 0:
-                if spark["sprite"] in animation_group:
-                    animation_group.remove(spark["sprite"])
-                continue
+def trigger_firework_burst(state):
+    cx = random.randint(8, WIDTH - 8)
+    cy = random.randint(6, HEIGHT // 2)
+    color = random.choice(dim_firework_colors)
 
-            spark["x"] += spark["dx"]
-            spark["y"] += spark["dy"]
-            spark["dy"] += gravity
-            spark["life"] -= 1
+    for _ in range(12):
+        activate_spark(state, cx, cy, color)
 
-            spark["sprite"].x = int(spark["x"])
-            spark["sprite"].y = int(spark["y"])
 
-            fade = spark["life"] / 25
-            r = int(((spark["color"] >> 16) & 0xFF) * fade)
-            g = int(((spark["color"] >> 8) & 0xFF) * fade)
-            b = int((spark["color"] & 0xFF) * fade)
-            spark["sprite"].pixel_shader[0] = (r << 16) | (g << 8) | b
+def step_fireworks(state, now):
+    if now - state["last_burst_time"] >= FIREWORK_BURST_INTERVAL:
+        trigger_firework_burst(state)
+        state["last_burst_time"] = now
 
-        time.sleep(0.05)
+    for spark in state["sparks"]:
+        if not spark["active"]:
+            continue
 
-    main_group.remove(animation_group)
-    gc.collect()
+        spark["x"] += spark["dx"]
+        spark["y"] += spark["dy"]
+        spark["dy"] += 0.15
+        spark["life"] -= 1
+
+        if spark["life"] <= 0:
+            spark["sprite"].x = -1
+            spark["sprite"].y = -1
+            spark["active"] = False
+            continue
+
+        spark["sprite"].x = int(spark["x"])
+        spark["sprite"].y = int(spark["y"])
+
+        fade = spark["life"] / 25
+        r = int(((spark["color"] >> 16) & 0xFF) * fade)
+        g = int(((spark["color"] >> 8) & 0xFF) * fade)
+        b = int((spark["color"] & 0xFF) * fade)
+        spark["palette"][0] = (r << 16) | (g << 8) | b
+
+
+def build_clock_scene():
+    global main_group
+
+    try:
+        main_group.remove(clock_tilegrid)
+    except Exception:
+        pass
+
+    main_group = displayio.Group()
+    display.root_group = main_group
+
+    fireworks_state = create_fireworks_state()
+    main_group.append(fireworks_state["group"])
+
+    date_label = Label(font_small, text=get_date_string(), color=WHITE)
+    date_label.x = (WIDTH - date_label.bounding_box[2]) // 2
+    date_label.y = TOP_BAND_Y - date_label.bounding_box[1] + (TOP_BAND_HEIGHT - date_label.bounding_box[3]) // 2
+    main_group.append(date_label)
+
+    draw_clock_text(clock_bitmap, get_time_string())
+    main_group.append(clock_tilegrid)
+
+    message_state = init_message_state()
+    main_group.append(message_state["msg_group"])
+
+    current_time = time.localtime()
+    return {
+        "fireworks": fireworks_state,
+        "date_label": date_label,
+        "last_date_day": current_time.tm_mday,
+        "last_clock_minute": current_time.tm_min,
+        "message": message_state,
+        "frame_count": 0,
+    }
+
+
+def clear_clock_scene(state):
+    if not state:
+        return
+
+    try:
+        main_group.remove(state["message"]["msg_group"])
+    except Exception:
+        pass
+
+    try:
+        main_group.remove(clock_tilegrid)
+    except Exception:
+        pass
+
+    try:
+        main_group.remove(state["date_label"])
+    except Exception:
+        pass
+
+    try:
+        main_group.remove(state["fireworks"]["group"])
+    except Exception:
+        pass
+
+    state.clear()
+
+
+def update_date_label(state):
+    current_time = time.localtime()
+    if current_time.tm_mday == state["last_date_day"]:
+        return
+
+    label = state["date_label"]
+    label.text = get_date_string()
+    label.x = (WIDTH - label.bounding_box[2]) // 2
+    state["last_date_day"] = current_time.tm_mday
+
+
+def update_clock_bitmap(state):
+    current_time = time.localtime()
+    if current_time.tm_min == state["last_clock_minute"]:
+        return
+
+
+    draw_clock_text(clock_bitmap, get_time_string())
+    state["last_clock_minute"] = current_time.tm_min
 
 
 print("*** Running Pico HUB75 Code! ***")
@@ -608,55 +1077,47 @@ except Exception as e:
     while True:
         time.sleep(1)  # Stop and wait
 
+# Build persistent layered scene
+scene_state = build_clock_scene()
+
 # === Main Loop ===
 while True:
-    # Check NTP sync
-    current_time = time.monotonic()
+    try:
+        current_time = time.monotonic()
 
-    if ntp_retry_active:
-        if current_time >= ntp_retry_time:
-            # Retry NTP sync
-            success = attempt_ntp_sync(ntp_server, timezone_offset)
-            if success:
-                ntp_retry_active = False
-            else:
+        if ntp_retry_active:
+            if current_time >= ntp_retry_time:
+                success = attempt_ntp_sync(ntp_server, timezone_offset, show_status=False)
+                if success:
+                    ntp_retry_active = False
+                else:
+                    ntp_retry_time = current_time + NTP_RETRY_DELAY
+        elif last_ntp_sync > 0 and current_time - last_ntp_sync >= NTP_INTERVAL:
+            success = attempt_ntp_sync(ntp_server, timezone_offset, show_status=False)
+            if not success:
+                ntp_retry_active = True
+                print(f"NTP sync failed, retrying in {NTP_RETRY_DELAY}s")
                 ntp_retry_time = current_time + NTP_RETRY_DELAY
-    elif last_ntp_sync > 0 and current_time - last_ntp_sync >= NTP_INTERVAL:
-        # Normal periodic sync
-        success = attempt_ntp_sync(ntp_server, timezone_offset)
-        if not success:
-            ntp_retry_active = True
-            print(f"NTP sync failed, retrying in {NTP_RETRY_DELAY}s")
-            ntp_retry_time = current_time + NTP_RETRY_DELAY
 
-    fireworks_animation(duration=2.5, burst_count=3, sparks_per_burst=40)
-    for i, (msg1, msg2, logo_path, *optional_color) in enumerate(messages):
-        try:
+        step_fireworks(scene_state["fireworks"], current_time)
+        update_clock_bitmap(scene_state)
+        update_date_label(scene_state)
+        if not step_message(scene_state["message"], current_time):
+            main_group.remove(scene_state["message"]["msg_group"])
+            scene_state["message"] = init_message_state()
+            main_group.append(scene_state["message"]["msg_group"])
+
+        scene_state["frame_count"] += 1
+        if scene_state["frame_count"] >= 200:
             gc.collect()
+            scene_state["frame_count"] = 0
 
-            # Handle callable messages (time display)
-            if callable(msg1):
-                msg1 = msg1()
+        time.sleep(FRAME_DELAY)
 
-            color = optional_color[0] if optional_color else None
-            scroll_group, content_width = create_scroll_group(
-                logo_path, msg1, msg2, color
-            )
-            scroll_group.x = WIDTH
-            main_group.append(scroll_group)
-
-            # while scroll_group.x > -content_width - 1:
-            while scroll_group.x > -content_width - 32:
-                scroll_group.x -= SCROLL_STEP
-                time.sleep(SCROLL_DELAY)
-
-            main_group.remove(scroll_group)
-            gc.collect()
-            time.sleep(0.5)
-
-        except MemoryError:
-            print("\U0001f4a5 MemoryError! Trying to recover...")
-            main_group = displayio.Group()
-            display.root_group = main_group
-            gc.collect()
-            time.sleep(1)
+    except MemoryError:
+        print("\U0001f4a5 MemoryError! Trying to recover...")
+        clear_clock_scene(scene_state)
+        scene_state = None
+        gc.collect()
+        scene_state = build_clock_scene()
+        time.sleep(1)
