@@ -89,14 +89,24 @@ def load_config():
         raise
 
 
-def _wrap_text(text, max_chars):
-    """Split text into lines of at most max_chars each."""
+def _wrap_text(text, font, max_width):
+    """Split text into lines that fit within max_width pixels.
+
+    Measures actual rendered width using the font, so variable-width
+    fonts wrap correctly.
+    """
     lines = []
-    while len(text) > max_chars:
-        lines.append(text[:max_chars])
-        text = text[max_chars:]
-    if text:
-        lines.append(text)
+    current = ""
+    for char in text:
+        test = current + char
+        test_label = Label(font, text=test)
+        if test_label.bounding_box[2] > max_width and current:
+            lines.append(current)
+            current = char
+        else:
+            current = test
+    if current:
+        lines.append(current)
     return lines
 
 
@@ -122,6 +132,7 @@ def display_status(message):
     display.root_group = main_group
 
     max_chars = 14
+    display_width = display.width - 2  # Account for x=2 left margin
 
     try:
         if display_mode == "setup":
@@ -132,13 +143,13 @@ def display_status(message):
 
             all_lines = []
             for msg in status_history:
-                all_lines.extend(_wrap_text(msg, max_chars))
+                all_lines.extend(_wrap_text(msg, font_small, display_width))
 
             # Keep only lines that fit on screen
             all_lines = all_lines[-max_screen_lines:]
 
             # Lines belonging to the newest message get WHITE, rest dimmed
-            newest_lines = _wrap_text(status_history[-1], max_chars)
+            newest_lines = _wrap_text(status_history[-1], font_small, display_width)
             newest_start = len(all_lines) - len(newest_lines)
 
             for i, line in enumerate(all_lines):
