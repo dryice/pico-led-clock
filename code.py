@@ -106,8 +106,9 @@ def display_status(message):
     In "setup" mode: shows a scrolling status log on the full screen.
     Long messages wrap across multiple lines. Oldest entries at top,
     newest at bottom (white). Older entries are dimmed.
-    In "clock" mode: shows a single truncated line in the bottom quarter
-    (y=48) to avoid covering the clock display.
+    In "clock" mode: shows a single truncated line at y=48. Note that
+    this still replaces the root group (wiping the clock scene), so it
+    should only be called when the clock is not actively displayed.
     """
     global main_group, status_history
     print(message)
@@ -262,7 +263,7 @@ def retry_ntp_until_synced(server, ssid, password, retry_delay=STARTUP_RETRY_DEL
     while True:
         if not wifi.radio.connected:
             print("WiFi disconnected before NTP sync, reconnecting...")
-            display_status(f"WiFi retry {retry_delay}s")
+            display_status("WiFi lost")
             ip_address, refreshed_requests = retry_wifi_until_connected(
                 ssid, password, retry_delay
             )
@@ -347,6 +348,13 @@ def setup():
             raise ValueError(f"Invalid timezone offset: {offset_hours}")
     except ValueError as e:
         print(f"✗ Invalid timezone offset: {e}")
+        display_status("Invalid config")
+        while True:
+            time.sleep(1)  # Stop and wait
+
+    # Validate WiFi credentials before retrying (config error, not transient)
+    if not wifi_ssid or not wifi_password:
+        print("✗ Invalid config: WiFi SSID and password are required")
         display_status("Invalid config")
         while True:
             time.sleep(1)  # Stop and wait
@@ -1173,6 +1181,10 @@ except Exception as e:
 gc.collect()  # Free memory from setup() before allocating scene objects
 print(f"Free memory before scene build: {gc.mem_free()} bytes")
 try:
+    scene_state = build_clock_scene()
+except MemoryError:
+    print("\U0001f4a5 MemoryError while building scene, retrying...")
+    gc.collect()
     scene_state = build_clock_scene()
 except Exception as e:
     print(f"✗ Scene build failed: {e}")
