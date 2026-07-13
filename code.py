@@ -25,6 +25,7 @@ import adafruit_ntp
 last_ntp_sync = 0
 ntp_retry_active = False
 ntp_retry_time = 0
+STARTUP_RETRY_DELAY = 10
 
 
 def load_config():
@@ -192,6 +193,41 @@ def sync_ntp(server, show_status=True):
         return None, None
 
 
+def retry_wifi_until_connected(ssid, password, retry_delay=STARTUP_RETRY_DELAY):
+    """Retry WiFi connection until successful, returning (ip_address, requests)."""
+    while True:
+        result = connect_wifi(ssid, password)
+        if result is not None:
+            return result
+
+        print(f"WiFi connection failed, retrying in {retry_delay} seconds")
+        display_status(f"WiFi retry {retry_delay}s")
+        time.sleep(retry_delay)
+        gc.collect()
+
+
+def retry_ntp_until_synced(server, ssid, password, retry_delay=STARTUP_RETRY_DELAY):
+    """Retry NTP sync until successful, returning (ntp_time, ntp_unix, refreshed_requests)."""
+    refreshed_requests = None
+
+    while True:
+        if not wifi.radio.connected:
+            print("WiFi disconnected before NTP sync, reconnecting...")
+            display_status(f"WiFi retry {retry_delay}s")
+            ip_address, refreshed_requests = retry_wifi_until_connected(
+                ssid, password, retry_delay
+            )
+
+        ntp_time, ntp_unix = sync_ntp(server)
+        if ntp_time is not None:
+            return ntp_time, ntp_unix, refreshed_requests
+
+        print(f"NTP sync failed, retrying in {retry_delay} seconds")
+        display_status(f"NTP retry {retry_delay}s")
+        time.sleep(retry_delay)
+        gc.collect()
+
+
 def apply_timezone(unix_timestamp, offset_hours):
     """Apply timezone offset to UTC Unix timestamp.
 
@@ -266,21 +302,16 @@ def setup():
         while True:
             time.sleep(1)  # Stop and wait
 
-    # Connect to WiFi
-    result = connect_wifi(wifi_ssid, wifi_password)
-    if result is None:
-        while True:
-            time.sleep(1)  # Stop and wait
-
-    ip_address, requests = result
+    # Connect to WiFi, retrying transient failures forever
+    ip_address, requests = retry_wifi_until_connected(wifi_ssid, wifi_password)
     gc.collect()
 
-    # Sync NTP
-    ntp_time, ntp_unix = sync_ntp(ntp_server)
-    if ntp_time is None:
-        while True:
-            time.sleep(1)  # Stop and wait
-
+    # Sync NTP, retrying transient failures forever
+    ntp_time, ntp_unix, refreshed_requests = retry_ntp_until_synced(
+        ntp_server, wifi_ssid, wifi_password
+    )
+    if refreshed_requests is not None:
+        requests = refreshed_requests
     gc.collect()
 
     # Calculate drift
