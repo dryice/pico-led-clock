@@ -1090,8 +1090,12 @@ except Exception as e:
         time.sleep(1)  # Stop and wait
 
 # Build persistent layered scene
-scene_state = build_clock_scene()
-
+try:
+    scene_state = build_clock_scene()
+except MemoryError:
+    print("\U0001f4a5 MemoryError while building scene, retrying...")
+    gc.collect()
+    scene_state = build_clock_scene()
 # === Main Loop ===
 while True:
     try:
