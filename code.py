@@ -25,6 +25,13 @@ import adafruit_ntp
 last_ntp_sync = 0
 ntp_retry_active = False
 ntp_retry_time = 0
+STARTUP_RETRY_DELAY = 10
+
+# Display mode: "setup" = full-screen multi-line log, "clock" = bottom-quarter single line
+display_mode = "setup"
+status_history = []
+STATUS_HISTORY_MAX = 5
+STATUS_DIM = 0x888888
 
 
 def load_config():
@@ -82,34 +89,89 @@ def load_config():
         raise
 
 
+def _wrap_text(text, font, max_width):
+    """Split text into lines that fit within max_width pixels.
+
+    Measures actual rendered width using the font, so variable-width
+    fonts wrap correctly.
+    """
+    lines = []
+    current = ""
+    for char in text:
+        test = current + char
+        test_label = Label(font, text=test)
+        if test_label.bounding_box[2] > max_width and current:
+            lines.append(current)
+            current = char
+        else:
+            current = test
+    if current:
+        lines.append(current)
+    return lines
+
+
 def display_status(message):
     """Display status message on LED matrix.
 
-    For long messages, truncates to fit the display width.
+    In "setup" mode: shows a scrolling status log on the full screen.
+    Long messages wrap across multiple lines. Oldest entries at top,
+    newest at bottom (white). Older entries are dimmed.
+    In "clock" mode: shows a single truncated line at y=48. Note that
+    this still replaces the root group (wiping the clock scene), so it
+    should only be called when the clock is not actively displayed.
     """
+    global main_group, status_history
     print(message)
 
+    # Track history for setup-mode log
+    status_history.append(message)
+    status_history = status_history[-STATUS_HISTORY_MAX:]
+
     # Clear main group by creating a new one
-    global main_group
     main_group = displayio.Group()
     display.root_group = main_group
 
-    # Create status label
-    try:
-        # Truncate long messages to fit display (roughly 12-15 chars for 64px width)
-        # Leave room for "..." if truncated
-        max_chars = 14
-        if len(message) > max_chars:
-            display_message = message[: max_chars - 3] + "..."
-        else:
-            display_message = message
+    max_chars = 14
+    display_width = display.width - 2  # Account for x=2 left margin
 
-        status_label = Label(font_small, text=display_message, color=WHITE, x=2, y=48)
-        main_group.append(status_label)
+    try:
+        if display_mode == "setup":
+            # Full screen: build wrapped lines from history (oldest to newest)
+            max_screen_lines = 5
+            line_spacing = 12
+            y_start = 4
+
+            all_lines = []
+            for msg in status_history:
+                all_lines.extend(_wrap_text(msg, font_small, display_width))
+
+            # Keep only lines that fit on screen
+            all_lines = all_lines[-max_screen_lines:]
+
+            # Lines belonging to the newest message get WHITE, rest dimmed
+            newest_lines = _wrap_text(status_history[-1], font_small, display_width)
+            newest_start = len(all_lines) - len(newest_lines)
+
+            for i, line in enumerate(all_lines):
+                y = y_start + (i * line_spacing)
+                color = WHITE if i >= newest_start else STATUS_DIM
+                label = Label(font_small, text=line, color=color, x=2, y=y)
+                main_group.append(label)
+        else:
+            # Clock mode: single line in bottom quarter only
+            if len(message) > max_chars:
+                display_message = message[: max_chars - 3] + "..."
+            else:
+                display_message = message
+
+            status_label = Label(
+                font_small, text=display_message, color=WHITE, x=2, y=48
+            )
+            main_group.append(status_label)
+
         display.refresh()
     except Exception as e:
         print(f"✗ Display error: {e}")
-        # Still try to continue
 
     gc.collect()
 
@@ -192,6 +254,41 @@ def sync_ntp(server, show_status=True):
         return None, None
 
 
+def retry_wifi_until_connected(ssid, password, retry_delay=STARTUP_RETRY_DELAY):
+    """Retry WiFi connection until successful, returning (ip_address, requests)."""
+    while True:
+        result = connect_wifi(ssid, password)
+        if result is not None:
+            return result
+
+        print(f"WiFi connection failed, retrying in {retry_delay} seconds")
+        display_status(f"WiFi retry {retry_delay}s")
+        time.sleep(retry_delay)
+        gc.collect()
+
+
+def retry_ntp_until_synced(server, ssid, password, retry_delay=STARTUP_RETRY_DELAY):
+    """Retry NTP sync until successful, returning (ntp_time, ntp_unix, refreshed_requests)."""
+    refreshed_requests = None
+
+    while True:
+        if not wifi.radio.connected:
+            print("WiFi disconnected before NTP sync, reconnecting...")
+            display_status("WiFi lost")
+            ip_address, refreshed_requests = retry_wifi_until_connected(
+                ssid, password, retry_delay
+            )
+
+        ntp_time, ntp_unix = sync_ntp(server)
+        if ntp_time is not None:
+            return ntp_time, ntp_unix, refreshed_requests
+
+        print(f"NTP sync failed, retrying in {retry_delay} seconds")
+        display_status(f"NTP retry {retry_delay}s")
+        time.sleep(retry_delay)
+        gc.collect()
+
+
 def apply_timezone(unix_timestamp, offset_hours):
     """Apply timezone offset to UTC Unix timestamp.
 
@@ -266,21 +363,23 @@ def setup():
         while True:
             time.sleep(1)  # Stop and wait
 
-    # Connect to WiFi
-    result = connect_wifi(wifi_ssid, wifi_password)
-    if result is None:
+    # Validate WiFi credentials before retrying (config error, not transient)
+    if not wifi_ssid or not wifi_password:
+        print("✗ Invalid config: WiFi SSID and password are required")
+        display_status("Invalid config")
         while True:
             time.sleep(1)  # Stop and wait
 
-    ip_address, requests = result
+    # Connect to WiFi, retrying transient failures forever
+    ip_address, requests = retry_wifi_until_connected(wifi_ssid, wifi_password)
     gc.collect()
 
-    # Sync NTP
-    ntp_time, ntp_unix = sync_ntp(ntp_server)
-    if ntp_time is None:
-        while True:
-            time.sleep(1)  # Stop and wait
-
+    # Sync NTP, retrying transient failures forever
+    ntp_time, ntp_unix, refreshed_requests = retry_ntp_until_synced(
+        ntp_server, wifi_ssid, wifi_password
+    )
+    if refreshed_requests is not None:
+        requests = refreshed_requests
     gc.collect()
 
     # Calculate drift
@@ -905,7 +1004,7 @@ def create_scroll_group(logo_path, text1, text2, color=None):
 
 
 def create_fireworks_state():
-    fireworks_group = displayio.Group(max_size=FIREWORK_POOL_SIZE)
+    fireworks_group = displayio.Group()
     sparks = []
 
     for _ in range(FIREWORK_POOL_SIZE):
@@ -1001,7 +1100,7 @@ def build_clock_scene():
     except Exception:
         pass
 
-    main_group = displayio.Group(max_size=8)
+    main_group = displayio.Group()
     display.root_group = main_group
 
     fireworks_state = create_fireworks_state()
@@ -1090,12 +1189,29 @@ except Exception as e:
         time.sleep(1)  # Stop and wait
 
 # Build persistent layered scene
+gc.collect()  # Free memory from setup() before allocating scene objects
+print(f"Free memory before scene build: {gc.mem_free()} bytes")
 try:
     scene_state = build_clock_scene()
 except MemoryError:
     print("\U0001f4a5 MemoryError while building scene, retrying...")
     gc.collect()
     scene_state = build_clock_scene()
+except Exception as e:
+    print(f"✗ Scene build failed: {e}")
+    import traceback
+    traceback.print_exception(type(e), e, e.__traceback__)
+    # Show error on LED matrix for diagnosis without serial console
+    try:
+        display_status(f"Err:{str(e)[:10]}")
+    except Exception:
+        pass
+    while True:
+        time.sleep(1)  # Stop and wait
+
+# Clock scene is live — switch display to bottom-quarter-only mode
+display_mode = "clock"
+
 # === Main Loop ===
 while True:
     try:

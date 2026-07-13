@@ -28,8 +28,8 @@ To enable automatic time synchronization, you'll need a **Pico 2W** (with built-
 
 3. Copy `config.ini` to your CIRCUITPY drive
 4. The clock will:
-   - Connect to WiFi on startup
-   - Sync time via NTP
+   - Connect to WiFi on startup, retrying every 10 seconds until success
+   - Sync time via NTP on startup, retrying every 10 seconds until success
    - Resync every 10 minutes
    - Display connection status on LED matrix
 
@@ -49,29 +49,34 @@ For regions with Daylight Saving Time, update `timezone_offset` twice yearly.
 - "Connecting..." - Connecting to WiFi
 - "Connected: IP" - WiFi connected
 - "Syncing..." - Syncing NTP
+- "WiFi retry 10s" - WiFi connection failed, retrying in 10 seconds (console shows full message)
+- "NTP retry 10s" - NTP sync failed, retrying in 10 seconds (console shows full message)
 - "Ready!" - Setup complete, starting animations
 
 ⚠️ **Security**: `config.ini` contains your WiFi password in plain text. Never commit this file to version control. It's already in `.gitignore` - keep it that way.
 
 **Troubleshooting:**
 
-If the clock displays "No config.ini":
+If the clock displays "No config.ini" or "Invalid config":
 - Check that `config.ini` exists in the root of your CIRCUITPY drive
 - Verify file format is correct (INI format with [wifi] and [ntp] sections)
-- Ensure SSID and password are correct
+- Ensure timezone offset is valid (-12 to +14, or use fractions like +5.5)
+- These are **blocking errors** - missing/invalid `config.ini` or invalid timezone require fixing the configuration file; the clock will stop and wait
 
-If the clock displays "WiFi failed":
-- Check that your WiFi SSID and password are correct
-- Check that your router is powered on
-- Check that the Pico 2W has a clear line of sight to your WiFi router
-- Verify the Pico 2W has power (LED on the board)
-- Try disconnecting from your router and reconfiguring WiFi
+If the clock displays "WiFi retry 10s":
+- This is a **transient** state - the clock is automatically retrying WiFi connection
+- Common causes: incorrect SSID/password, router offline, weak WiFi signal
+- Check your WiFi credentials in `config.ini`
+- Ensure your router is powered on and within range
+- The clock will continue retrying every 10 seconds until connection succeeds
 
-If the clock displays "NTP failed":
-- Check your internet connection is working
-- Verify NTP server name is correct (pool.ntp.org is reliable)
+If the clock displays "NTP retry 10s":
+- This is a **transient** state - the clock is automatically retrying NTP sync
+- Common causes: no internet connection, blocked NTP port (123), NTP server down
+- Verify your internet connection is working
 - Check that port 123 (NTP) is not blocked by your firewall
-- Try using a different NTP server temporarily
+- Ensure NTP server name in `config.ini` is correct (pool.ntp.org is reliable)
+- The clock will continue retrying every 10 seconds until sync succeeds
 
 
 
