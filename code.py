@@ -822,7 +822,6 @@ def step_message(message_state, now):
 # Add a second line of text in the empty strings for a two-line message in smaller font
 messages = [
     ('→', '', None, WHITE),
-    (get_full_time_string, '', None, PEACH),
 ]
 
 
