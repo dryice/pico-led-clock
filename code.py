@@ -89,11 +89,23 @@ def load_config():
         raise
 
 
+def _wrap_text(text, max_chars):
+    """Split text into lines of at most max_chars each."""
+    lines = []
+    while len(text) > max_chars:
+        lines.append(text[:max_chars])
+        text = text[max_chars:]
+    if text:
+        lines.append(text)
+    return lines
+
+
 def display_status(message):
     """Display status message on LED matrix.
 
-    In "setup" mode: shows a multi-line status log on the full screen
-    (newest at top in white, history below in dim gray).
+    In "setup" mode: shows a scrolling status log on the full screen.
+    Long messages wrap across multiple lines. Oldest entries at top,
+    newest at bottom (white). Older entries are dimmed.
     In "clock" mode: shows a single truncated line in the bottom quarter
     (y=48) to avoid covering the clock display.
     """
@@ -112,21 +124,26 @@ def display_status(message):
 
     try:
         if display_mode == "setup":
-            # Full screen: show status history log, newest at top
+            # Full screen: build wrapped lines from history (oldest to newest)
+            max_screen_lines = 5
             line_spacing = 12
-            y_start = 6
-            for i, msg in enumerate(reversed(status_history)):
+            y_start = 4
+
+            all_lines = []
+            for msg in status_history:
+                all_lines.extend(_wrap_text(msg, max_chars))
+
+            # Keep only lines that fit on screen
+            all_lines = all_lines[-max_screen_lines:]
+
+            # Lines belonging to the newest message get WHITE, rest dimmed
+            newest_lines = _wrap_text(status_history[-1], max_chars)
+            newest_start = len(all_lines) - len(newest_lines)
+
+            for i, line in enumerate(all_lines):
                 y = y_start + (i * line_spacing)
-                if y >= 64:
-                    break
-
-                if len(msg) > max_chars:
-                    display_msg = msg[: max_chars - 3] + "..."
-                else:
-                    display_msg = msg
-
-                color = WHITE if i == 0 else STATUS_DIM
-                label = Label(font_small, text=display_msg, color=color, x=2, y=y)
+                color = WHITE if i >= newest_start else STATUS_DIM
+                label = Label(font_small, text=line, color=color, x=2, y=y)
                 main_group.append(label)
         else:
             # Clock mode: single line in bottom quarter only
