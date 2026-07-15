@@ -25,7 +25,7 @@ import adafruit_ntp
 last_ntp_sync = 0
 ntp_retry_active = False
 ntp_retry_time = 0
-STARTUP_RETRY_DELAY = 10
+STARTUP_RETRY_DELAY = 1
 
 # Display mode: "setup" = full-screen multi-line log, "clock" = bottom-quarter single line
 display_mode = "setup"
@@ -110,7 +110,7 @@ def _wrap_text(text, font, max_width):
     return lines
 
 
-def display_status(message):
+def display_status(message, display_color):
     """Display status message on LED matrix.
 
     In "setup" mode: shows a scrolling status log on the full screen.
@@ -154,8 +154,8 @@ def display_status(message):
 
             for i, line in enumerate(all_lines):
                 y = y_start + (i * line_spacing)
-                color = WHITE if i >= newest_start else STATUS_DIM
-                label = Label(font_small, text=line, color=color, x=2, y=y)
+                color = display_color
+                label = Label(font_small, text=line, color=display_color, x=2, y=y)
                 main_group.append(label)
         else:
             # Clock mode: single line in bottom quarter only
@@ -178,14 +178,14 @@ def display_status(message):
 
 def connect_wifi(ssid, password):
     """Connect to WiFi and return (ip_address, requests) tuple or None on failure."""
-    display_status("Connecting...")
+    display_status("Connecting...", WHITE)
     time.sleep(1)
 
     try:
         # Validate inputs
         if not ssid or not password:
             print("✗ Connection failed: ssid and password required")
-            display_status("WiFi failed")
+            display_status("WiFi failed", PURERED)
             return None
 
         # Connect to network
@@ -199,13 +199,13 @@ def connect_wifi(ssid, password):
 
         if not wifi.radio.connected:
             print(f"✗ Connection failed: timeout after 10s")
-            display_status("WiFi failed")
+            display_status("WiFi failed", PURERED)
             return None
 
         # Get IP address
         ip_address = wifi.radio.ipv4_address
         print(f"✓ Connected, my IP is {ip_address}")
-        display_status(f"Connected: {ip_address}")
+        display_status(f"Connected: {ip_address}", PUREGREEN)
         time.sleep(1)  # Show success message for 1 second
 
         # Create socket pool for requests
@@ -217,7 +217,7 @@ def connect_wifi(ssid, password):
 
     except Exception as e:
         print(f"✗ Connection failed: {e}")
-        display_status("WiFi failed")
+        display_status("WiFi failed", PURERED)
         return None
 
 
@@ -228,7 +228,7 @@ def sync_ntp(server, show_status=True):
     else:
         print(f"Syncing NTP from {server}...")
     if show_status:
-        display_status("Syncing...")
+        display_status("Syncing...", WHITE)
 
     try:
         # Create socket pool for NTP
@@ -250,7 +250,7 @@ def sync_ntp(server, show_status=True):
     except Exception as e:
         print(f"✗ NTP sync failed: {e}")
         if show_status:
-            display_status("NTP failed")
+            display_status("NTP failed", PURERED)
         return None, None
 
 
@@ -262,7 +262,7 @@ def retry_wifi_until_connected(ssid, password, retry_delay=STARTUP_RETRY_DELAY):
             return result
 
         print(f"WiFi connection failed, retrying in {retry_delay} seconds")
-        display_status(f"WiFi retry {retry_delay}s")
+        display_status(f"WiFi retry {retry_delay}s", PURERED)
         time.sleep(retry_delay)
         gc.collect()
 
@@ -274,7 +274,7 @@ def retry_ntp_until_synced(server, ssid, password, retry_delay=STARTUP_RETRY_DEL
     while True:
         if not wifi.radio.connected:
             print("WiFi disconnected before NTP sync, reconnecting...")
-            display_status("WiFi lost")
+            display_status("WiFi lost", PURERED)
             ip_address, refreshed_requests = retry_wifi_until_connected(
                 ssid, password, retry_delay
             )
@@ -284,7 +284,7 @@ def retry_ntp_until_synced(server, ssid, password, retry_delay=STARTUP_RETRY_DEL
             return ntp_time, ntp_unix, refreshed_requests
 
         print(f"NTP sync failed, retrying in {retry_delay} seconds")
-        display_status(f"NTP retry {retry_delay}s")
+        display_status(f"NTP retry {retry_delay}s", PURERED)
         time.sleep(retry_delay)
         gc.collect()
 
@@ -336,13 +336,13 @@ def setup():
     global last_ntp_sync
 
     # Display setup message
-    display_status("Setup...")
+    display_status("Setup...", WHITE)
 
     # Load config
     try:
         config = load_config()
     except Exception as e:
-        display_status("No config.ini")
+        display_status("No config.ini", PURERED)
         while True:
             time.sleep(1)  # Stop and wait
 
@@ -359,14 +359,14 @@ def setup():
             raise ValueError(f"Invalid timezone offset: {offset_hours}")
     except ValueError as e:
         print(f"✗ Invalid timezone offset: {e}")
-        display_status("Invalid config")
+        display_status("Invalid config", PURERED)
         while True:
             time.sleep(1)  # Stop and wait
 
     # Validate WiFi credentials before retrying (config error, not transient)
     if not wifi_ssid or not wifi_password:
         print("✗ Invalid config: WiFi SSID and password are required")
-        display_status("Invalid config")
+        display_status("Invalid config", PURERED)
         while True:
             time.sleep(1)  # Stop and wait
 
@@ -399,9 +399,8 @@ def setup():
     last_ntp_sync = time.monotonic()
 
     # Ready to start
-    display_status("Ready!")
+    display_status("Ready!", PUREGREEN)
     time.sleep(2)
-    display_status("")
 
     return config, requests, offset_hours, ntp_server
 
@@ -429,7 +428,7 @@ def attempt_ntp_sync(ntp_server, timezone_offset, show_status=True):
         rtc.RTC().datetime = local_time
 
         if show_status:
-            display_status("Time synced")
+            display_status("Time synced", PUREGREEN)
             time.sleep(1)
 
         # Update last NTP sync time
@@ -441,7 +440,7 @@ def attempt_ntp_sync(ntp_server, timezone_offset, show_status=True):
     except Exception as e:
         print(f"✗ NTP sync failed: {e}")
         if show_status:
-            display_status("NTP retry...")
+            display_status("NTP retry...", PURERED)
         return False
 
 
@@ -512,6 +511,8 @@ PEACH = 0xFFDAB9
 WARM_GOLD = 0xFFD700
 GOLDENROD = 0xDAA520
 TANGERINE = 0xFFA07A
+PUREGREEN = 0x00FF00
+PURERED = 0xFF0000
 
 
 def dim_color(color):
@@ -569,7 +570,7 @@ CLOCK_DIGIT_GLYPHS = {
 
 CLOCK_DIGIT_SCALE = 4
 CLOCK_DIGIT_GAP = 1
-CLOCK_COLOR = WARM_GOLD
+CLOCK_COLOR = DEEP_CORAL
 CLOCK_BACKGROUND_INDEX = 0
 CLOCK_FOREGROUND_INDEX = 1
 CLOCK_TEXT_START_X = 4
@@ -931,10 +932,6 @@ def step_message(message_state, now):
 # === Messages: (text, unused, logo_path, optional_color)
 # Only the first element (text) is displayed. Logos are skipped in the 16px band.
 # You can add or remove elements from the messages list as you like.
-messages = [
-    ('->', '', None, WHITE),
-]
-
 
 def create_scroll_group(logo_path, text1, text2, color=None):
     group = displayio.Group()
@@ -1035,7 +1032,7 @@ def create_fireworks_state():
     }
 
 
-def activate_spark(state, cx, cy, color):
+def activate_spark(state, cx, cy, color, create_new_sparks):
     spark = state["sparks"][state["next_spark_index"]]
     state["next_spark_index"] = (state["next_spark_index"] + 1) % FIREWORK_POOL_SIZE
 
@@ -1048,23 +1045,37 @@ def activate_spark(state, cx, cy, color):
     spark["y"] = float(cy)
     spark["dx"] = speed * math.cos(angle)
     spark["dy"] = speed * math.sin(angle) - 2.0
-    spark["life"] = random.randint(15, 25)
+    spark["life"] = [random.randint(30, 50)]
+    if create_new_sparks == True:
+        spark["life"].append(spark["life"][0]) # first number is current life, second number is starting life
+    else:
+        spark["life"].append(-1000) # The condition to create new sparks will never run. So there is no infinite duplication
     spark["active"] = True
     spark["color"] = color
 
 
-def trigger_firework_burst(state):
-    cx = random.randint(8, WIDTH - 8)
-    cy = random.randint(6, HEIGHT // 2)
-    color = random.choice(dim_firework_colors)
+def trigger_firework_burst(state, cx, cy, create_new_sparks, spark_color):
+    if cx == 'Random':
+        cx = random.randint(8, WIDTH - 8)
+    if cy == 'Random':
+        cy = random.randint(6, HEIGHT // 2)
+    if spark_color == 'Random':
+        color = random.choice(dim_firework_colors)
+    else:
+        color = spark_color
 
-    for _ in range(12):
-        activate_spark(state, cx, cy, color)
+    if create_new_sparks:
+        new_sparks = 12
+    else:
+        new_sparks = 3
+
+    for _ in range(new_sparks):
+        activate_spark(state, cx, cy, color, create_new_sparks)
 
 
 def step_fireworks(state, now):
     if now - state["last_burst_time"] >= FIREWORK_BURST_INTERVAL:
-        trigger_firework_burst(state)
+        trigger_firework_burst(state, 'Random', 'Random', True, 'Random')
         state["last_burst_time"] = now
 
     for spark in state["sparks"]:
@@ -1074,18 +1085,21 @@ def step_fireworks(state, now):
         spark["x"] += spark["dx"]
         spark["y"] += spark["dy"]
         spark["dy"] += 0.15
-        spark["life"] -= 1
+        spark["life"][0] -= 1
 
-        if spark["life"] <= 0:
+        if spark["life"][0] <= 0:
             spark["sprite"].x = -1
             spark["sprite"].y = -1
             spark["active"] = False
             continue
 
+        if (spark["life"][1] - spark["life"][0] == 10) & spark["active"]: # So dead sparks cannot have a life of -990 and create new sparks
+            trigger_firework_burst(state, spark["sprite"].x, spark["sprite"].y, False, spark["color"])
+
         spark["sprite"].x = int(spark["x"])
         spark["sprite"].y = int(spark["y"])
 
-        fade = spark["life"] / 25
+        fade = spark["life"][0] / 25
         r = int(((spark["color"] >> 16) & 0xFF) * fade)
         g = int(((spark["color"] >> 8) & 0xFF) * fade)
         b = int((spark["color"] & 0xFF) * fade)
@@ -1106,7 +1120,7 @@ def build_clock_scene():
     fireworks_state = create_fireworks_state()
     main_group.append(fireworks_state["group"])
 
-    date_label = Label(font_small, text=get_date_string(), color=WHITE)
+    date_label = Label(font_small, text=get_date_string(), color=(127, 0, 127))
     date_label.x = (WIDTH - date_label.bounding_box[2]) // 2
     date_label.y = TOP_BAND_Y - date_label.bounding_box[1] + (TOP_BAND_HEIGHT - date_label.bounding_box[3]) // 2
     main_group.append(date_label)
@@ -1184,7 +1198,7 @@ try:
     config, requests, timezone_offset, ntp_server = setup()
 except Exception as e:
     print(f"✗ Setup failed: {e}")
-    display_status("Setup failed")
+    display_status("Setup failed", PURERED)
     while True:
         time.sleep(1)  # Stop and wait
 
@@ -1203,7 +1217,7 @@ except Exception as e:
     traceback.print_exception(type(e), e, e.__traceback__)
     # Show error on LED matrix for diagnosis without serial console
     try:
-        display_status(f"Err:{str(e)[:10]}")
+        display_status(f"Err:{str(e)[:10]}", PURERED)
     except Exception:
         pass
     while True:
