@@ -89,7 +89,7 @@ def load_config():
         raise
 
 
-def _wrap_text(text, font, max_width):
+def _wrap_text(text, font, max_width, color):
     """Split text into lines that fit within max_width pixels.
 
     Measures actual rendered width using the font, so variable-width
@@ -101,12 +101,12 @@ def _wrap_text(text, font, max_width):
         test = current + char
         test_label = Label(font, text=test)
         if test_label.bounding_box[2] > max_width and current:
-            lines.append(current)
+            lines.append([current, color])
             current = char
         else:
             current = test
     if current:
-        lines.append(current)
+        lines.append([current, color])
     return lines
 
 
@@ -124,7 +124,7 @@ def display_status(message, display_color):
     print(message)
 
     # Track history for setup-mode log
-    status_history.append(message)
+    status_history.append([message, display_color])
     status_history = status_history[-STATUS_HISTORY_MAX:]
 
     # Clear main group by creating a new one
@@ -143,19 +143,17 @@ def display_status(message, display_color):
 
             all_lines = []
             for msg in status_history:
-                all_lines.extend(_wrap_text(msg, font_small, display_width))
+                all_lines.extend(_wrap_text(msg[0], font_small, display_width, msg[1]))
 
             # Keep only lines that fit on screen
             all_lines = all_lines[-max_screen_lines:]
 
-            # Lines belonging to the newest message get WHITE, rest dimmed
-            newest_lines = _wrap_text(status_history[-1], font_small, display_width)
+            newest_lines = _wrap_text(status_history[-1][0], font_small, display_width, display_color)
             newest_start = len(all_lines) - len(newest_lines)
 
             for i, line in enumerate(all_lines):
                 y = y_start + (i * line_spacing)
-                color = display_color
-                label = Label(font_small, text=line, color=display_color, x=2, y=y)
+                label = Label(font_small, text=line[0], color=line[1], x=2, y=y)
                 main_group.append(label)
         else:
             # Clock mode: single line in bottom quarter only
@@ -178,14 +176,14 @@ def display_status(message, display_color):
 
 def connect_wifi(ssid, password):
     """Connect to WiFi and return (ip_address, requests) tuple or None on failure."""
-    display_status("Connecting...", WHITE)
+    display_status("Connecting...", 0xFFFFFF)
     time.sleep(1)
 
     try:
         # Validate inputs
         if not ssid or not password:
             print("✗ Connection failed: ssid and password required")
-            display_status("WiFi failed", PURERED)
+            display_status("WiFi failed", (255, 0, 0))
             return None
 
         # Connect to network
@@ -199,13 +197,13 @@ def connect_wifi(ssid, password):
 
         if not wifi.radio.connected:
             print(f"✗ Connection failed: timeout after 10s")
-            display_status("WiFi failed", PURERED)
+            display_status("WiFi failed", (255, 0, 0))
             return None
 
         # Get IP address
         ip_address = wifi.radio.ipv4_address
         print(f"✓ Connected, my IP is {ip_address}")
-        display_status(f"Connected: {ip_address}", PUREGREEN)
+        display_status(f"Connected: {ip_address}", (0, 255, 0))
         time.sleep(1)  # Show success message for 1 second
 
         # Create socket pool for requests
@@ -217,7 +215,7 @@ def connect_wifi(ssid, password):
 
     except Exception as e:
         print(f"✗ Connection failed: {e}")
-        display_status("WiFi failed", PURERED)
+        display_status("WiFi failed", (255, 0, 0))
         return None
 
 
@@ -228,7 +226,7 @@ def sync_ntp(server, show_status=True):
     else:
         print(f"Syncing NTP from {server}...")
     if show_status:
-        display_status("Syncing...", WHITE)
+        display_status("Syncing...", (255, 255, 255))
 
     try:
         # Create socket pool for NTP
@@ -250,7 +248,7 @@ def sync_ntp(server, show_status=True):
     except Exception as e:
         print(f"✗ NTP sync failed: {e}")
         if show_status:
-            display_status("NTP failed", PURERED)
+            display_status("NTP failed", (255, 0, 0))
         return None, None
 
 
@@ -262,7 +260,7 @@ def retry_wifi_until_connected(ssid, password, retry_delay=STARTUP_RETRY_DELAY):
             return result
 
         print(f"WiFi connection failed, retrying in {retry_delay} seconds")
-        display_status(f"WiFi retry {retry_delay}s", PURERED)
+        display_status(f"WiFi retry {retry_delay}s", (255, 0, 0))
         time.sleep(retry_delay)
         gc.collect()
 
@@ -274,7 +272,7 @@ def retry_ntp_until_synced(server, ssid, password, retry_delay=STARTUP_RETRY_DEL
     while True:
         if not wifi.radio.connected:
             print("WiFi disconnected before NTP sync, reconnecting...")
-            display_status("WiFi lost", PURERED)
+            display_status("WiFi lost", (255, 0, 0))
             ip_address, refreshed_requests = retry_wifi_until_connected(
                 ssid, password, retry_delay
             )
@@ -284,7 +282,7 @@ def retry_ntp_until_synced(server, ssid, password, retry_delay=STARTUP_RETRY_DEL
             return ntp_time, ntp_unix, refreshed_requests
 
         print(f"NTP sync failed, retrying in {retry_delay} seconds")
-        display_status(f"NTP retry {retry_delay}s", PURERED)
+        display_status(f"NTP retry {retry_delay}s", (255, 0, 0))
         time.sleep(retry_delay)
         gc.collect()
 
@@ -336,13 +334,13 @@ def setup():
     global last_ntp_sync
 
     # Display setup message
-    display_status("Setup...", WHITE)
+    display_status("Setup...", (255, 255, 255))
 
     # Load config
     try:
         config = load_config()
     except Exception as e:
-        display_status("No config.ini", PURERED)
+        display_status("No config.ini", (255, 0, 0))
         while True:
             time.sleep(1)  # Stop and wait
 
@@ -359,14 +357,14 @@ def setup():
             raise ValueError(f"Invalid timezone offset: {offset_hours}")
     except ValueError as e:
         print(f"✗ Invalid timezone offset: {e}")
-        display_status("Invalid config", PURERED)
+        display_status("Invalid config", (255, 0, 0))
         while True:
             time.sleep(1)  # Stop and wait
 
     # Validate WiFi credentials before retrying (config error, not transient)
     if not wifi_ssid or not wifi_password:
         print("✗ Invalid config: WiFi SSID and password are required")
-        display_status("Invalid config", PURERED)
+        display_status("Invalid config", (255, 0, 0))
         while True:
             time.sleep(1)  # Stop and wait
 
@@ -399,7 +397,7 @@ def setup():
     last_ntp_sync = time.monotonic()
 
     # Ready to start
-    display_status("Ready!", PUREGREEN)
+    display_status("Ready!", (0, 255, 0))
     time.sleep(2)
 
     return config, requests, offset_hours, ntp_server
@@ -428,7 +426,7 @@ def attempt_ntp_sync(ntp_server, timezone_offset, show_status=True):
         rtc.RTC().datetime = local_time
 
         if show_status:
-            display_status("Time synced", PUREGREEN)
+            display_status("Time synced", (0, 255, 0))
             time.sleep(1)
 
         # Update last NTP sync time
@@ -440,7 +438,7 @@ def attempt_ntp_sync(ntp_server, timezone_offset, show_status=True):
     except Exception as e:
         print(f"✗ NTP sync failed: {e}")
         if show_status:
-            display_status("NTP retry...", PURERED)
+            display_status("NTP retry...", (255, 0, 0))
         return False
 
 
@@ -483,7 +481,7 @@ HEIGHT = display.height
 
 # === Firework Constants ===
 FIREWORK_POOL_SIZE = 48
-FIREWORK_BURST_INTERVAL = 1.2
+FIREWORK_BURST_INTERVAL = 5
 FIREWORK_DIM_DIVISOR = 4
 
 # === Set Initial Time ===
@@ -1198,7 +1196,7 @@ try:
     config, requests, timezone_offset, ntp_server = setup()
 except Exception as e:
     print(f"✗ Setup failed: {e}")
-    display_status("Setup failed", PURERED)
+    display_status("Setup failed", (255, 0, 0))
     while True:
         time.sleep(1)  # Stop and wait
 
@@ -1217,7 +1215,7 @@ except Exception as e:
     traceback.print_exception(type(e), e, e.__traceback__)
     # Show error on LED matrix for diagnosis without serial console
     try:
-        display_status(f"Err:{str(e)[:10]}", PURERED)
+        display_status(f"Err:{str(e)[:10]}", (255, 0, 0))
     except Exception:
         pass
     while True:
